@@ -1,4 +1,3 @@
-import json
 import os
 from flask import Flask, request
 from telegram import Bot, Update
@@ -8,7 +7,8 @@ app = Flask(__name__)
 
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-WEBHOOK_URL = os.getenv('WEBHOOK_URL')
+if not TELEGRAM_TOKEN:
+    raise ValueError("TELEGRAM_TOKEN environment variable is not set.")
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
