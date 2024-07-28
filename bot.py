@@ -1,51 +1,40 @@
-import os
-import requests
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-from search_download import search_and_download  # Assuming search_and_download function is defined in search_download.py
+from flask import Flask, request
+from telegram import Bot, Update
+from telegram.ext import CommandHandler, Dispatcher, Filters, MessageHandler, Updater
+from telegram.ext import CallbackContext
+import config
 
-# Function to handle the /start command
-def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Hi! I am your file bot. Send me the file name to search and download.')
+# Initialize Flask app
+app = Flask(__name__)
 
-# Function to handle file search and download
-def handle_file_download(update: Update, context: CallbackContext) -> None:
-    file_name = update.message.text
-    chat_id = update.message.chat_id
+# Initialize Telegram bot
+bot = Bot(token=config.TELEGRAM_TOKEN)
+dispatcher = Dispatcher(bot, None, workers=0)
 
-    # Call the search_and_download function
-    search_and_download(file_name)
+# Define the start command handler
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text('Hello, World!')
 
-    # Check if the file was downloaded successfully
-    download_path = os.path.join("downloads", f"{file_name}")
-    if os.path.exists(download_path):
-        context.bot.send_document(chat_id=chat_id, document=open(download_path, 'rb'))
-        os.remove(download_path)  # Remove the file after sending
+# Add handlers to dispatcher
+dispatcher.add_handler(CommandHandler('start', start))
 
-# Function to handle errors
-def error(update: Update, context: CallbackContext) -> None:
-    print(f"Update {update} caused error {context.error}")
+# Webhook route
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    dispatcher.process_update(update)
+    return 'ok', 200
 
-# Main function to run the bot
-def main() -> None:
-    # Replace 'YOUR_BOT_TOKEN' with your actual bot token
-    updater = Updater("YOUR_BOT_TOKEN", use_context=True)
+# Home route
+@app.route('/')
+def home():
+    return 'Hello, World!'
 
-    # Get the dispatcher to register handlers
-    dispatcher = updater.dispatcher
-
-    # Register command handlers
-    dispatcher.add_handler(CommandHandler("start", start))
-
-    # Register message handler for file searches
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_file_download))
-
-    # Register error handler
-    dispatcher.add_error_handler(error)
-
-    # Start the Bot
-    updater.start_polling()
-    updater.idle()
+# Set the webhook for Telegram bot
+def set_webhook():
+    webhook_url = f"{config.WEBHOOK_URL}/webhook"
+    bot.set_webhook(url=webhook_url)
 
 if __name__ == '__main__':
-    main()
+    set_webhook()
+    app.run(port=5000)  # Use a different port if 5000 doesn't work
