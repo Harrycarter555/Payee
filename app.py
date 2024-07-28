@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request
+from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext
 
@@ -32,6 +32,11 @@ def webhook():
 @app.route('/')
 def home():
     return 'Hello, World!'
+
+# Favicon route
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.getcwd(), 'favicon.ico')
 
 if __name__ == '__main__':
     app.run(port=5000)
