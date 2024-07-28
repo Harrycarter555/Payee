@@ -6,7 +6,7 @@ from telegram.ext import Dispatcher, CommandHandler, CallbackContext
 
 app = Flask(__name__)
 
-# Load configuration
+# Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', 'your_default_telegram_token')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL', 'https://your-default-webhook-url')
 
@@ -33,8 +33,9 @@ def webhook():
 def home():
     return 'Hello, World!'
 
-# Lambda handler
+# Vercel will invoke this function
 def lambda_handler(event, context):
+    # Running Flask server
     from werkzeug.serving import run_simple
     run_simple('0.0.0.0', 5000, app)
     return {
