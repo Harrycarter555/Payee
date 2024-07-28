@@ -1,14 +1,17 @@
+import json
+import os
 from flask import Flask, request
 from telegram import Bot, Update
-from telegram.ext import CommandHandler, Dispatcher, Filters, MessageHandler, Updater
-from telegram.ext import CallbackContext
-import config
+from telegram.ext import Dispatcher, CommandHandler, CallbackContext
 
-# Initialize Flask app
 app = Flask(__name__)
 
+# Load configuration
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', 'your_default_telegram_token')
+WEBHOOK_URL = os.getenv('WEBHOOK_URL', 'https://your-default-webhook-url')
+
 # Initialize Telegram bot
-bot = Bot(token=config.TELEGRAM_TOKEN)
+bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=0)
 
 # Define the start command handler
@@ -30,11 +33,14 @@ def webhook():
 def home():
     return 'Hello, World!'
 
-# Set the webhook for Telegram bot
-def set_webhook():
-    webhook_url = f"{config.WEBHOOK_URL}/webhook"
-    bot.set_webhook(url=webhook_url)
+# Lambda handler
+def lambda_handler(event, context):
+    from werkzeug.serving import run_simple
+    run_simple('0.0.0.0', 5000, app)
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello, World!')
+    }
 
 if __name__ == '__main__':
-    set_webhook()
-    app.run(port=5000)  # Use a different port if 5000 doesn't work
+    app.run(port=5000)
