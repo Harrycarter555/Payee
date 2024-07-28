@@ -43,13 +43,18 @@ def home():
 def favicon():
     return send_from_directory(os.getcwd(), 'favicon.ico')
 
-def set_webhook():
+# Webhook setup route
+@app.route('/setwebhook', methods=['GET', 'POST'])
+def setup_webhook():
+    webhook_url = f'https://payee-neon.vercel.app/webhook'  # Ensure this URL is correct
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-        data={'url': WEBHOOK_URL}
+        data={'url': webhook_url}
     )
-    print(response.json())  # Log the response for debugging
+    if response.json().get('ok'):
+        return "Webhook setup ok"
+    else:
+        return "Webhook setup failed"
 
 if __name__ == '__main__':
-    set_webhook()  # Set the webhook when the app starts
     app.run(port=5000)
