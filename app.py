@@ -33,15 +33,5 @@ def webhook():
 def home():
     return 'Hello, World!'
 
-# Vercel will invoke this function
-def lambda_handler(event, context):
-    # Running Flask server
-    from werkzeug.serving import run_simple
-    run_simple('0.0.0.0', 5000, app)
-    return {
-        'statusCode': 200,
-        'body': json.dumps('Hello, World!')
-    }
-
 if __name__ == '__main__':
     app.run(port=5000)
