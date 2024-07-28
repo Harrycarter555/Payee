@@ -7,8 +7,8 @@ from telegram.ext import Dispatcher, CommandHandler, CallbackContext
 app = Flask(__name__)
 
 # Load configuration from environment variables
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', 'your_default_telegram_token')
-WEBHOOK_URL = os.getenv('WEBHOOK_URL', 'https://your-default-webhook-url')
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
