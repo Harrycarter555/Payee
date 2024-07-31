@@ -10,11 +10,14 @@ app = Flask(__name__)
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
+URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')  # Add this line
 
 if not TELEGRAM_TOKEN:
     raise ValueError("TELEGRAM_TOKEN environment variable is not set.")
 if not WEBHOOK_URL:
     raise ValueError("WEBHOOK_URL environment variable is not set.")
+if not URL_SHORTENER_API_KEY:
+    raise ValueError("URL_SHORTENER_API_KEY environment variable is not set.")
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
@@ -22,22 +25,30 @@ dispatcher = Dispatcher(bot, None, workers=0)
 
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text('Hello, World!')
+    update.message.reply_text('Upload your file')
 
-# Define the handler for receiving documents
+# Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
     file = update.message.document.get_file()
-    file.download('downloaded_file')
-    
-    # Assume you upload file to a cloud storage and get a link
-    file_link = 'https://storagehc.vercel.app/downloaded_file'
-    
-    # Shorten the URL
-    from shortener import shorten_url
-    short_link = shorten_url(file_link)
-    
-    # Send the shortened link back to the user
-    update.message.reply_text(f'Your file link: {short_link}')
+    file_url = file.file_path
+    short_url = shorten_url(file_url)
+    update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}')
+
+# Shorten URL using the URL shortener API
+def shorten_url(long_url: str) -> str:
+    shortener_url = 'https://api.urlshortener.com/shorten'  # Replace with actual API URL if different
+    try:
+        response = requests.post(
+            shortener_url,
+            json={'longUrl': long_url},
+            headers={'Authorization': f'Bearer {URL_SHORTENER_API_KEY}'}
+        )
+        if response.status_code == 200:
+            return response.json().get('shortUrl', long_url)
+        else:
+            return long_url
+    except Exception as e:
+        return long_url
 
 # Add handlers to dispatcher
 dispatcher.add_handler(CommandHandler('start', start))
@@ -63,7 +74,7 @@ def favicon():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    webhook_url = f'{WEBHOOK_URL}/webhook'
+    webhook_url = f'https://storagehc.vercel.app/webhook'  # Ensure this URL is correct
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
         data={'url': webhook_url}
@@ -72,6 +83,14 @@ def setup_webhook():
         return "Webhook setup ok"
     else:
         return "Webhook setup failed"
+
+# Lambda handler function
+def lambda_handler(event, context):
+    # Your function logic here
+    return {
+        'statusCode': 200,
+        'body': json.dumps({'message': 'Hello from Lambda!'})
+    }
 
 if __name__ == '__main__':
     app.run(port=5000)
