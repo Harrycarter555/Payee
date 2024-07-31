@@ -12,6 +12,7 @@ TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')  # Add this line
+FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')  # Add this line
 
 if not TELEGRAM_TOKEN:
     raise ValueError("TELEGRAM_TOKEN environment variable is not set.")
@@ -21,6 +22,8 @@ if not URL_SHORTENER_API_KEY:
     raise ValueError("URL_SHORTENER_API_KEY environment variable is not set.")
 if not CHANNEL_USERNAME:
     raise ValueError("CHANNEL_USERNAME environment variable is not set.")
+if not FILE_OPENER_BOT_USERNAME:
+    raise ValueError("FILE_OPENER_BOT_USERNAME environment variable is not set.")
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
@@ -40,11 +43,15 @@ def handle_document(update: Update, context: CallbackContext):
     
     # Process URL shortening
     short_url = shorten_url(file_url)
-
-    # Post to the channel
+    
+    # Post to the channel with a link to the file opener bot
     bot.send_message(
         chat_id=f'@{CHANNEL_USERNAME}',
-        text=f"Here is your link: {short_url}\nHow to open Tutorial: [Tutorial link](tutorial_link_here)"
+        text=(
+            f"Here is your file link: {short_url}\n"
+            f"To open the file, click [here](https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url}).\n"
+            f"How to open Tutorial: [Tutorial link](tutorial_link_here)"
+        )
     )
 
     # Edit message with the short URL
