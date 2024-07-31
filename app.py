@@ -14,6 +14,7 @@ URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')  # Add this line
 CHANNEL_ID = os.getenv('CHANNEL_ID')  # Add this line
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')  # Add this line
 
+# Validate environment variables
 if not TELEGRAM_TOKEN:
     raise ValueError("TELEGRAM_TOKEN environment variable is not set.")
 if not WEBHOOK_URL:
@@ -52,21 +53,27 @@ def handle_document(update: Update, context: CallbackContext):
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
-    shortener_url = f'https://publicearn.com/api?api=d15e1e3029f8e793ad6d02cf3343365ac15ad144&url={long_url}&format=text'  # Fixed the URL
+    shortener_url = f'https://publicearn.com/api?api=d15e1e3029f8e793ad6d02cf3343365ac15ad144&url={long_url}&format=text'
     try:
         response = requests.post(shortener_url)
         if response.status_code == 200:
             return response.text.strip()
         else:
+            print(f"Shortener API response error: {response.status_code} {response.text}")  # Debugging
             return long_url
     except Exception as e:
+        print(f"Exception in shorten_url: {str(e)}")  # Debugging
         return long_url
 
 # Post the shortened URL to the channel
 def post_to_channel(short_url: str):
     message = (f'Click here to access the file: {short_url}\n'
                f'For instructions on how to open the file, visit: https://t.me/{FILE_OPENER_BOT_USERNAME}')
-    bot.send_message(chat_id=CHANNEL_ID, text=message)
+    try:
+        bot.send_message(chat_id=CHANNEL_ID, text=message)
+        print(f"Message posted to channel: {message}")  # Debugging
+    except Exception as e:
+        print(f"Error posting to channel: {str(e)}")  # Debugging
 
 # Add handlers to dispatcher
 dispatcher.add_handler(CommandHandler('start', start))
@@ -92,10 +99,9 @@ def favicon():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    webhook_url = f'https://storagehc.vercel.app/webhook'  # Ensure this URL is correct
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-        data={'url': webhook_url}
+        data={'url': WEBHOOK_URL}
     )
     if response.json().get('ok'):
         return "Webhook setup ok"
