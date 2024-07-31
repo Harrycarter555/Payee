@@ -1,19 +1,23 @@
 import os
 import requests
-from flask import Flask, request, send_from_directory
+import logging
+from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext
 
 app = Flask(__name__)
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 
-if not TELEGRAM_TOKEN:
-    raise ValueError("TELEGRAM_TOKEN environment variable is not set.")
-if not WEBHOOK_URL:
-    raise ValueError("WEBHOOK_URL environment variable is not set.")
+if not TELEGRAM_TOKEN or not WEBHOOK_URL:
+    logger.error("Environment variables TELEGRAM_TOKEN or WEBHOOK_URL are not set.")
+    raise ValueError("Required environment variables are not set.")
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
@@ -29,32 +33,30 @@ dispatcher.add_handler(CommandHandler('start', start))
 # Webhook route
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    dispatcher.process_update(update)
-    return 'ok', 200
-
-# Home route
-@app.route('/')
-def home():
-    return 'Hello, World!'
-
-# Favicon route
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory(os.getcwd(), 'favicon.ico')
+    try:
+        update = Update.de_json(request.get_json(force=True), bot)
+        dispatcher.process_update(update)
+        return 'ok', 200
+    except Exception as e:
+        logger.error(f"Error processing update: {e}")
+        return 'Internal Server Error', 500
 
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    webhook_url = f'https://payee-neon.vercel.app/webhook'  # Ensure this URL is correct
-    response = requests.post(
-        f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-        data={'url': webhook_url}
-    )
-    if response.json().get('ok'):
-        return "Webhook setup ok"
-    else:
-        return "Webhook setup failed"
+    try:
+        response = requests.post(
+            f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
+            data={'url': WEBHOOK_URL}
+        )
+        if response.json().get('ok'):
+            return "Webhook setup ok"
+        else:
+            logger.error(f"Failed to set webhook: {response.json()}")
+            return "Webhook setup failed"
+    except Exception as e:
+        logger.error(f"Error setting up webhook: {e}")
+        return "Webhook setup error", 500
 
 if __name__ == '__main__':
-    app.run(port=5000)
+    app.run(port=int(os.getenv('PORT', 5000)))
