@@ -11,7 +11,7 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
-CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')  # Ensure this is correctly set
+CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')  # Ensure this is correctly set
 
 if not TELEGRAM_TOKEN:
