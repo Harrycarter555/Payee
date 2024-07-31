@@ -75,7 +75,7 @@ def ask_file_name(update: Update, context: CallbackContext):
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
-    shortener_url = f'https://publicearn.com/api?api={URL_SHORTENER_API_KEY}&url={long_url}&format=text'
+    shortener_url = f'https://publicearn.com/api?api=d15e1e3029f8e793ad6d02cf3343365ac15ad144&url={long_url}&format=text'
     try:
         response = requests.post(shortener_url)
         if response.status_code == 200:
