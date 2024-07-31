@@ -11,7 +11,7 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
-CHANNEL_ID = os.getenv('CHANNEL_ID')  # Add this line for the channel ID
+CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')  # Add this line
 
 if not TELEGRAM_TOKEN:
     raise ValueError("TELEGRAM_TOKEN environment variable is not set.")
@@ -19,8 +19,8 @@ if not WEBHOOK_URL:
     raise ValueError("WEBHOOK_URL environment variable is not set.")
 if not URL_SHORTENER_API_KEY:
     raise ValueError("URL_SHORTENER_API_KEY environment variable is not set.")
-if not CHANNEL_ID:
-    raise ValueError("CHANNEL_ID environment variable is not set.")
+if not CHANNEL_USERNAME:
+    raise ValueError("CHANNEL_USERNAME environment variable is not set.")
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
@@ -40,29 +40,27 @@ def handle_document(update: Update, context: CallbackContext):
     
     # Process URL shortening
     short_url = shorten_url(file_url)
-    
-    # Post the short URL to the channel
-    post_to_channel(short_url)
+
+    # Post to the channel
+    bot.send_message(
+        chat_id=f'@{CHANNEL_USERNAME}',
+        text=f"Here is your link: {short_url}\nHow to open Tutorial: [Tutorial link](tutorial_link_here)"
+    )
 
     # Edit message with the short URL
     processing_message.edit_text(f'File uploaded successfully. Here is your short link: {short_url}')
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
-    shortener_url = f'https://publicearn.com/api?api={URL_SHORTENER_API_KEY}&url={long_url}&alias=CustomAlias&format=text'
+    shortener_url = f'https://publicearn.com/api?api={URL_SHORTENER_API_KEY}&url={long_url}&format=text'
     try:
         response = requests.get(shortener_url)
         if response.status_code == 200:
-            return response.text.strip()
+            return response.text.strip()  # Response contains the short URL as plain text
         else:
             return long_url
     except Exception as e:
         return long_url
-
-# Post the short URL to the channel
-def post_to_channel(short_url: str):
-    message = f'https://t.me/@usernamebot?start={short_url}'
-    bot.send_message(chat_id=CHANNEL_ID, text=message)
 
 # Add handlers to dispatcher
 dispatcher.add_handler(CommandHandler('start', start))
@@ -88,7 +86,7 @@ def favicon():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    webhook_url = f'https://storagehc.vercel.app/webhook'
+    webhook_url = WEBHOOK_URL
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
         data={'url': webhook_url}
