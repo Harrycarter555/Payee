@@ -51,6 +51,7 @@ def shorten_url(long_url: str) -> str:
         else:
             return long_url
     except Exception as e:
+        print(f"Error shortening URL: {e}")
         return long_url
 
 # Add handlers to dispatcher
@@ -77,7 +78,7 @@ def favicon():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    webhook_url = f'https://storagehc.vercel.app/webhook'  # Ensure this URL is correct
+    webhook_url = f'https://storagehc.vercel.app/webhook'
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
         data={'url': webhook_url}
@@ -89,7 +90,6 @@ def setup_webhook():
 
 # Lambda handler function
 def lambda_handler(event, context):
-    # Your function logic here
     return {
         'statusCode': 200,
         'body': json.dumps({'message': 'Hello from Lambda!'})
