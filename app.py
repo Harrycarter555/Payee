@@ -29,10 +29,17 @@ def start(update: Update, context: CallbackContext):
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
+    # Send processing message
+    message = update.message.reply_text('Processing your file, please wait...')
+
     file = update.message.document.get_file()
     file_url = file.file_path
+    
+    # Process URL shortening in a separate function
     short_url = shorten_url(file_url)
-    update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}')
+    
+    # Edit message with the short URL
+    message.edit_text(f'File uploaded successfully. Here is your short link: {short_url}')
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
