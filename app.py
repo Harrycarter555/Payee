@@ -4,6 +4,7 @@ import logging
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext
+from shortener import shorten_url  # Import the shorten_url function
 
 app = Flask(__name__)
 
@@ -27,8 +28,16 @@ dispatcher = Dispatcher(bot, None, workers=0)
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Hello, World!')
 
+# Define the document handler
+def handle_document(update: Update, context: CallbackContext):
+    file = update.message.document.get_file()
+    file_url = file.file_path
+    short_url = shorten_url(file_url)
+    update.message.reply_text(f'Here is your file link: {short_url}')
+
 # Add handlers to dispatcher
 dispatcher.add_handler(CommandHandler('start', start))
+dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
