@@ -11,6 +11,7 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
+CHANNEL_ID = os.getenv('CHANNEL_ID')  # Add this line for the channel ID
 
 if not TELEGRAM_TOKEN:
     raise ValueError("TELEGRAM_TOKEN environment variable is not set.")
@@ -18,6 +19,8 @@ if not WEBHOOK_URL:
     raise ValueError("WEBHOOK_URL environment variable is not set.")
 if not URL_SHORTENER_API_KEY:
     raise ValueError("URL_SHORTENER_API_KEY environment variable is not set.")
+if not CHANNEL_ID:
+    raise ValueError("CHANNEL_ID environment variable is not set.")
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
@@ -38,12 +41,15 @@ def handle_document(update: Update, context: CallbackContext):
     # Process URL shortening
     short_url = shorten_url(file_url)
     
+    # Post the short URL to the channel
+    post_to_channel(short_url)
+
     # Edit message with the short URL
     processing_message.edit_text(f'File uploaded successfully. Here is your short link: {short_url}')
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
-    shortener_url = f'https://publicearn.com/api?api={URL_SHORTENER_API_KEY}&url={long_url}&format=text'
+    shortener_url = f'https://publicearn.com/api?api={URL_SHORTENER_API_KEY}&url={long_url}&alias=CustomAlias&format=text'
     try:
         response = requests.get(shortener_url)
         if response.status_code == 200:
@@ -51,8 +57,12 @@ def shorten_url(long_url: str) -> str:
         else:
             return long_url
     except Exception as e:
-        print(f"Error shortening URL: {e}")
         return long_url
+
+# Post the short URL to the channel
+def post_to_channel(short_url: str):
+    message = f'https://t.me/@usernamebot?start={short_url}'
+    bot.send_message(chat_id=CHANNEL_ID, text=message)
 
 # Add handlers to dispatcher
 dispatcher.add_handler(CommandHandler('start', start))
@@ -87,13 +97,6 @@ def setup_webhook():
         return "Webhook setup ok"
     else:
         return "Webhook setup failed"
-
-# Lambda handler function
-def lambda_handler(event, context):
-    return {
-        'statusCode': 200,
-        'body': json.dumps({'message': 'Hello from Lambda!'})
-    }
 
 if __name__ == '__main__':
     app.run(port=5000)
