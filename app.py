@@ -1,5 +1,6 @@
 import os
 import requests
+import logging
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
@@ -77,25 +78,22 @@ def ask_file_name(update: Update, context: CallbackContext):
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
     encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
-    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}&alias=CustomAlias"
+    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}&alias=CustomAlias&format=text"
     
     try:
         response = requests.get(api_url)
         response.raise_for_status()  # Raise an exception for HTTP errors
-        result = response.json()
         
-        if result.get("status") == 'error':
-            print(f"Error shortening URL: {result.get('message')}")
-            return long_url
+        # Response is expected to be plain text containing the shortened URL
+        short_url = response.text.strip()
+        
+        if short_url.startswith("http"):
+            return short_url
         else:
-            short_url = result.get("shortenedUrl")
-            if short_url:
-                return short_url
-            else:
-                print("Unexpected response format")
-                return long_url
+            logging.error(f"Unexpected response: {short_url}")
+            return long_url
     except requests.RequestException as e:
-        print(f"Request error: {e}")
+        logging.error(f"Request error: {e}")
         return long_url
 
 # Post the shortened URL to the channel
