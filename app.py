@@ -1,11 +1,14 @@
 import os
 import requests
 import logging
-from flask import Flask, request
+from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 
 app = Flask(__name__)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -84,13 +87,15 @@ def shorten_url(long_url: str) -> str:
         response = requests.get(api_url)
         response.raise_for_status()  # Raise an exception for HTTP errors
         
-        # Response is expected to be plain text containing the shortened URL
-        short_url = response.text.strip()
+        # Log the raw response for debugging
+        logging.info(f"API response: {response.text}")
         
+        # Check if the response is a valid shortened URL
+        short_url = response.text.strip()
         if short_url.startswith("http"):
             return short_url
         else:
-            logging.error(f"Unexpected response: {short_url}")
+            logging.error(f"Unexpected response format: {short_url}")
             return long_url
     except requests.RequestException as e:
         logging.error(f"Request error: {e}")
@@ -139,6 +144,11 @@ def setup_webhook():
         return "Webhook setup ok"
     else:
         return "Webhook setup failed"
+
+# Favicon route
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory('static', 'favicon.ico')
 
 if __name__ == '__main__':
     app.run(port=5000)
