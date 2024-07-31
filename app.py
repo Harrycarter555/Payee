@@ -81,14 +81,16 @@ def shorten_url(long_url: str) -> str:
 
     try:
         response = requests.get(api_url)
-        print("API Response:", response.text)  # Log the full response for debugging
+        print("API Response:", response.json())  # Log the full response for debugging
         response.raise_for_status()  # Raise an exception for HTTP errors
-        short_url = response.text.strip()
-        if short_url:
-            return short_url
-        else:
-            print("Unexpected response format")
-            return long_url
+        
+        response_data = response.json()
+        if response_data.get("status") == "success":
+            short_url = response_data.get("shortenedUrl", "")
+            if short_url:
+                return short_url
+        print("Unexpected response format")
+        return long_url
     except requests.RequestException as e:
         print(f"Request error: {e}")
         return long_url
