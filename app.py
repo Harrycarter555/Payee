@@ -1,11 +1,16 @@
 import os
 import json
+import logging
 import requests
 from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
-from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
+from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters
 
 app = Flask(__name__)
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -29,52 +34,24 @@ if not FILE_OPENER_BOT_USERNAME:
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=0)
 
-# Define the conversation states
-CHOOSING, TYPING_REPLY = range(2)
-
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Upload your file')
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
-    # Send processing message
     processing_message = update.message.reply_text('Processing your file, please wait...')
-    context.user_data['file'] = update.message.document.get_file()
-    context.user_data['file_url'] = context.user_data['file'].file_path
-    context.user_data['processing_message'] = processing_message
-
-    # Ask for confirmation to post the shortened URL
-    update.message.reply_text('Do you want to post the shortened link to the channel? (y/n)')
-
-    return CHOOSING
-
-# Handle user response for posting to channel
-def handle_choice(update: Update, context: CallbackContext):
-    text = update.message.text.lower()
-    if text == 'y':
-        # Shorten URL
-        short_url = shorten_url(context.user_data['file_url'])
-        # Ask for the file name
-        update.message.reply_text('Please provide the file name for the post.')
-        context.user_data['short_url'] = short_url
-        return TYPING_REPLY
-    else:
-        update.message.reply_text('File upload process cancelled.')
-        return ConversationHandler.END
-
-# Handle file name input
-def handle_file_name(update: Update, context: CallbackContext):
-    file_name = update.message.text
-    short_url = context.user_data['short_url']
+    file = update.message.document.get_file()
+    file_url = file.file_path
     
-    # Post the shortened URL to the channel
-    post_to_channel(file_name, short_url)
+    # Process URL shortening
+    short_url = shorten_url(file_url)
+    
+    # Post the short URL to the channel
+    post_to_channel(short_url)
 
-    # Edit the processing message
-    context.user_data['processing_message'].edit_text(f'File uploaded successfully. Here is your short link: {short_url}')
-
-    return ConversationHandler.END
+    # Edit message with the short URL
+    processing_message.edit_text(f'File uploaded successfully. Here is your short link: {short_url}')
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
@@ -84,38 +61,39 @@ def shorten_url(long_url: str) -> str:
         if response.status_code == 200:
             return response.text.strip()
         else:
+            logger.error(f"Failed to shorten URL: {response.text}")
             return long_url
     except Exception as e:
+        logger.error(f"Exception occurred while shortening URL: {e}")
         return long_url
 
 # Post the shortened URL to the channel
-def post_to_channel(file_name: str, short_url: str):
-    message = (f'{file_name}\n'
-               f'Click here to access the file: https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url}')
+def post_to_channel(short_url: str):
+    message = (f'File Name\n'
+               f'Click here to access the file: {short_url}\n'
+               f'For instructions on how to open the file, visit: https://t.me/{FILE_OPENER_BOT_USERNAME}')
     try:
         bot.send_message(chat_id=CHANNEL_ID, text=message)
+        logger.info(f"Message posted to channel with URL: {short_url}")
     except Exception as e:
-        print(f"An error occurred while posting to the channel: {e}")
-
-# Define the conversation handler
-conv_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.document, handle_document)],
-    states={
-        CHOOSING: [MessageHandler(Filters.text & ~Filters.command, handle_choice)],
-        TYPING_REPLY: [MessageHandler(Filters.text & ~Filters.command, handle_file_name)],
-    },
-    fallbacks=[CommandHandler('start', start)],
-)
+        logger.error(f"Failed to post message to channel: {e}")
 
 # Add handlers to dispatcher
-dispatcher.add_handler(conv_handler)
+dispatcher.add_handler(CommandHandler('start', start))
+dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    dispatcher.process_update(update)
-    return 'ok', 200
+    logger.info("Received webhook request")
+    try:
+        update = Update.de_json(request.get_json(force=True), bot)
+        dispatcher.process_update(update)
+        logger.info("Update processed successfully")
+        return 'ok', 200
+    except Exception as e:
+        logger.error(f"Error processing update: {e}")
+        return f"Internal Server Error: {e}", 500
 
 # Home route
 @app.route('/')
@@ -130,14 +108,20 @@ def favicon():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    webhook_url = f'https://storagehc.vercel.app/webhook'
-    response = requests.post(
-        f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-        data={'url': webhook_url}
-    )
-    if response.json().get('ok'):
-        return "Webhook setup ok"
-    else:
+    webhook_url = f'https://storagehc.vercel.app/webhook'  # Ensure this URL is correct
+    try:
+        response = requests.post(
+            f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
+            data={'url': webhook_url}
+        )
+        if response.json().get('ok'):
+            logger.info("Webhook setup successful")
+            return "Webhook setup ok"
+        else:
+            logger.error("Webhook setup failed: " + response.text)
+            return "Webhook setup failed"
+    except Exception as e:
+        logger.error(f"Exception during webhook setup: {e}")
         return "Webhook setup failed"
 
 # Lambda handler function
