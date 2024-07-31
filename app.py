@@ -11,8 +11,8 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
-CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')  # Add this line
-FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')  # Add this line
+CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')  # Ensure this is correctly set
+FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')  # Ensure this is correctly set
 
 if not TELEGRAM_TOKEN:
     raise ValueError("TELEGRAM_TOKEN environment variable is not set.")
@@ -51,7 +51,8 @@ def handle_document(update: Update, context: CallbackContext):
             f"Here is your file link: {short_url}\n"
             f"To open the file, click [here](https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url}).\n"
             f"How to open Tutorial: [Tutorial link](tutorial_link_here)"
-        )
+        ),
+        parse_mode='Markdown'
     )
 
     # Edit message with the short URL
@@ -67,6 +68,7 @@ def shorten_url(long_url: str) -> str:
         else:
             return long_url
     except Exception as e:
+        print(f"Error shortening URL: {e}")  # Log the error
         return long_url
 
 # Add handlers to dispatcher
@@ -93,15 +95,14 @@ def favicon():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    webhook_url = WEBHOOK_URL
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-        data={'url': webhook_url}
+        data={'url': WEBHOOK_URL}
     )
     if response.json().get('ok'):
         return "Webhook setup ok"
     else:
-        return "Webhook setup failed"
+        return f"Webhook setup failed: {response.json().get('description')}"
 
 if __name__ == '__main__':
     app.run(port=5000)
