@@ -43,7 +43,7 @@ def handle_document(update: Update, context: CallbackContext):
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
-    shortener_url = 'https://api.urlshortener.com/shorten'  # Replace with actual API URL if different
+    shortener_url = 'https://publicearn.com/api?api=d15e1e3029f8e793ad6d02cf3343365ac15ad144&url=yourdestinationlink.com&alias=CustomAlias&format=text'  # Replace with actual API URL if different
     try:
         response = requests.post(
             shortener_url,
