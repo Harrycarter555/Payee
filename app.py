@@ -10,7 +10,7 @@ app = Flask(__name__)
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
-URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')  # Add this line
+URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 
 if not TELEGRAM_TOKEN:
     raise ValueError("TELEGRAM_TOKEN environment variable is not set.")
@@ -43,15 +43,11 @@ def handle_document(update: Update, context: CallbackContext):
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
-    shortener_url = 'https://publicearn.com/api?api=d15e1e3029f8e793ad6d02cf3343365ac15ad144&url=yourdestinationlink.com&alias=CustomAlias&format=text'  # Replace with actual API URL if different
+    shortener_url = f'https://publicearn.com/api?api={URL_SHORTENER_API_KEY}&url={long_url}&format=text'
     try:
-        response = requests.post(
-            shortener_url,
-            json={'longUrl': long_url},
-            headers={'Authorization': f'Bearer {URL_SHORTENER_API_KEY}'}
-        )
+        response = requests.get(shortener_url)
         if response.status_code == 200:
-            return response.json().get('shortUrl', long_url)
+            return response.text.strip()
         else:
             return long_url
     except Exception as e:
