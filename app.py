@@ -77,12 +77,12 @@ def ask_file_name(update: Update, context: CallbackContext):
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
     encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
-    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}&alias=CustomAlias&format=text"
-    
+    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"  # Use the provided API URL
+
     try:
         response = requests.get(api_url)
         response.raise_for_status()  # Raise an exception for HTTP errors
-        short_url = response.text.strip()
+        short_url = response.text.strip()  # Extract the short URL from the response
         if short_url:
             return short_url
         else:
