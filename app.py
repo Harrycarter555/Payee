@@ -3,7 +3,7 @@ import json
 import requests
 from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
-from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters
+from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 
 app = Flask(__name__)
 
@@ -29,6 +29,9 @@ if not FILE_OPENER_BOT_USERNAME:
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=0)
 
+# Define the conversation states
+CHOOSING, TYPING_REPLY = range(2)
+
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Upload your file')
@@ -37,18 +40,41 @@ def start(update: Update, context: CallbackContext):
 def handle_document(update: Update, context: CallbackContext):
     # Send processing message
     processing_message = update.message.reply_text('Processing your file, please wait...')
+    context.user_data['file'] = update.message.document.get_file()
+    context.user_data['file_url'] = context.user_data['file'].file_path
+    context.user_data['processing_message'] = processing_message
 
-    file = update.message.document.get_file()
-    file_url = file.file_path
-    
-    # Process URL shortening
-    short_url = shorten_url(file_url)
-    
-    # Post the short URL to the channel
-    post_to_channel(short_url)
+    # Ask for confirmation to post the shortened URL
+    update.message.reply_text('Do you want to post the shortened link to the channel? (y/n)')
 
-    # Edit message with the short URL
-    processing_message.edit_text(f'File uploaded successfully. Here is your short link: {short_url}')
+    return CHOOSING
+
+# Handle user response for posting to channel
+def handle_choice(update: Update, context: CallbackContext):
+    text = update.message.text.lower()
+    if text == 'y':
+        # Shorten URL
+        short_url = shorten_url(context.user_data['file_url'])
+        # Ask for the file name
+        update.message.reply_text('Please provide the file name for the post.')
+        context.user_data['short_url'] = short_url
+        return TYPING_REPLY
+    else:
+        update.message.reply_text('File upload process cancelled.')
+        return ConversationHandler.END
+
+# Handle file name input
+def handle_file_name(update: Update, context: CallbackContext):
+    file_name = update.message.text
+    short_url = context.user_data['short_url']
+    
+    # Post the shortened URL to the channel
+    post_to_channel(file_name, short_url)
+
+    # Edit the processing message
+    context.user_data['processing_message'].edit_text(f'File uploaded successfully. Here is your short link: {short_url}')
+
+    return ConversationHandler.END
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
@@ -63,17 +89,26 @@ def shorten_url(long_url: str) -> str:
         return long_url
 
 # Post the shortened URL to the channel
-def post_to_channel(short_url: str):
-    message = (f'File uploaded successfully. Click here to access the file: {short_url}\n'
-               f'For instructions on how to open the file, visit: https://t.me/{FILE_OPENER_BOT_USERNAME}')
+def post_to_channel(file_name: str, short_url: str):
+    message = (f'{file_name}\n'
+               f'Click here to access the file: https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url}')
     try:
         bot.send_message(chat_id=CHANNEL_ID, text=message)
     except Exception as e:
         print(f"An error occurred while posting to the channel: {e}")
 
+# Define the conversation handler
+conv_handler = ConversationHandler(
+    entry_points=[MessageHandler(Filters.document, handle_document)],
+    states={
+        CHOOSING: [MessageHandler(Filters.text & ~Filters.command, handle_choice)],
+        TYPING_REPLY: [MessageHandler(Filters.text & ~Filters.command, handle_file_name)],
+    },
+    fallbacks=[CommandHandler('start', start)],
+)
+
 # Add handlers to dispatcher
-dispatcher.add_handler(CommandHandler('start', start))
-dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
+dispatcher.add_handler(conv_handler)
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
