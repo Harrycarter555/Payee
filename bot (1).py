@@ -1,127 +1,71 @@
-from flask import Flask, request, jsonify
-import logging
 import os
 import requests
-import hmac
-import hashlib
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, PreCheckoutQueryHandler, CallbackContext
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+import logging
+from flask import Flask, request
+from telegram import Bot, Update
+from telegram.ext import Dispatcher, CommandHandler, CallbackContext
+from shortener import shorten_url  # Import the shorten_url function
 
 app = Flask(__name__)
 
-# Setup logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Telegram Application
-application = Application.builder().token(os.getenv('BOT_TOKEN')).build()
+# Load configuration from environment variables
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 
-# Define your handlers here
-async def start(update: Update, context: CallbackContext):
-    await update.message.reply_text('Welcome! Use /sample to get a sample file or /buy to purchase the full file.')
+if not TELEGRAM_TOKEN or not WEBHOOK_URL:
+    logger.error("Environment variables TELEGRAM_TOKEN or WEBHOOK_URL are not set.")
+    raise ValueError("Required environment variables are not set.")
 
-async def sample(update: Update, context: CallbackContext):
-    sample_file_url = os.getenv('SAMPLE_FILE_URL')
-    if not sample_file_url:
-        await update.message.reply_text("Sample file URL is not configured.")
-        return
+# Initialize Telegram bot
+bot = Bot(token=TELEGRAM_TOKEN)
+dispatcher = Dispatcher(bot, None, workers=0)
 
-    response = requests.get(sample_file_url)
-    if response.status_code == 200:
-        file = response.content
-        await context.bot.send_document(chat_id=update.message.chat_id, document=file)
-    else:
-        await update.message.reply_text("Failed to retrieve the sample file. Please try again later.")
+# Define the start command handler
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text('Hello, World!')
 
-async def buy(update: Update, context: CallbackContext):
-    payment_link = os.getenv('RAZORPAY_PAYMENT_LINK')
-    if not payment_link:
-        await update.message.reply_text("Payment link is not configured.")
-        return
-    await update.message.reply_text(f"Click the following link to complete your payment: {payment_link}")
+# Define the document handler
+def handle_document(update: Update, context: CallbackContext):
+    file = update.message.document.get_file()
+    file_url = file.file_path
+    short_url = shorten_url(file_url)
+    update.message.reply_text(f'Here is your file link: {short_url}')
 
-async def precheckout_callback(update: Update, context: CallbackContext):
-    query = update.pre_checkout_query
-    if query.invoice_payload != 'unique-payload':
-        await query.answer(ok=False, error_message="Invalid payload.")
-        logger.warning(f"Invalid payload: {query.invoice_payload}")
-    else:
-        await query.answer(ok=True)
+# Add handlers to dispatcher
+dispatcher.add_handler(CommandHandler('start', start))
+dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
 
-async def successful_payment(update: Update, context: CallbackContext):
-    await update.message.reply_text(f'Thank you for your payment! You can download your full file from the following link: {os.getenv("FULL_FILE_LINK")}')
-
-# Register handlers with Application
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("sample", sample))
-application.add_handler(CommandHandler("buy", buy))
-application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
-application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
-
-@app.route('/webhook/telegram', methods=['POST'])
-def telegram_webhook():
+# Webhook route
+@app.route('/webhook', methods=['POST'])
+def webhook():
     try:
-        json_data = request.get_json()
-        if json_data is None:
-            logger.warning("Received empty data")
-            return 'Bad Request', 400
-
-        update = Update.de_json(json_data, application.bot)
-        application.process_update(update)
-        return 'OK'
+        update = Update.de_json(request.get_json(force=True), bot)
+        dispatcher.process_update(update)
+        return 'ok', 200
     except Exception as e:
-        logger.error(f"Error in Telegram webhook: {e}")
+        logger.error(f"Error processing update: {e}")
         return 'Internal Server Error', 500
 
-@app.route('/webhook/razorpay', methods=['POST'])
-def razorpay_webhook():
+# Webhook setup route
+@app.route('/setwebhook', methods=['GET', 'POST'])
+def setup_webhook():
     try:
-        headers = request.headers
-        request_body = request.data.decode('utf-8')
-        json_data = request.get_json()
-        if json_data is None:
-            logger.warning("Received empty data")
-            return 'Bad Request', 400
-
-        razorpay_secret = os.getenv('RAZORPAY_SECRET')
-        if not razorpay_secret:
-            logger.error("Razorpay secret is not configured.")
-            return 'Internal Server Error', 500
-
-        razorpay_signature = headers.get('X-Razorpay-Signature')
-        if not razorpay_signature:
-            logger.error("Razorpay signature is missing from request headers.")
-            return 'Unauthorized', 401
-
-        if not validate_signature(request_body, razorpay_signature, razorpay_secret):
-            logger.warning("Invalid Razorpay signature")
-            return 'Unauthorized', 401
-
-        event_type = json_data.get('event')
-        if event_type == 'payment_captured':
-            payment_id = json_data.get('payload', {}).get('payment', {}).get('entity', {}).get('id')
-            logger.info(f"Payment captured: {payment_id}")
-
-        return 'OK'
+        response = requests.post(
+            f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
+            data={'url': WEBHOOK_URL}
+        )
+        if response.json().get('ok'):
+            return "Webhook setup ok"
+        else:
+            logger.error(f"Failed to set webhook: {response.json()}")
+            return "Webhook setup failed"
     except Exception as e:
-        logger.error(f"Error in Razorpay webhook: {e}")
-        return 'Internal Server Error', 500
-
-@app.route('/favicon.ico')
-def favicon():
-    return '', 204
-
-def validate_signature(payload_str, signature, secret):
-    generated_signature = hmac.new(
-        key=secret.encode('utf-8'),
-        msg=payload_str.encode('utf-8'),
-        digestmod=hashlib.sha256
-    ).hexdigest()
-    return hmac.compare_digest(generated_signature, signature)
+        logger.error(f"Error setting up webhook: {e}")
+        return "Webhook setup error", 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(port=int(os.getenv('PORT', 5000)))
