@@ -45,8 +45,18 @@ def handle_document(update: Update, context: CallbackContext):
     file = update.message.document.get_file()
     file_url = file.file_path
     short_url = shorten_url(file_url)
-    post_to_channel(short_url)
-    processing_message.edit_text(f'File uploaded successfully. Here is your short link: {short_url}')
+    
+    # Generate file name
+    file_name = update.message.document.file_name
+    
+    # Create redirect link for the file opener bot
+    file_opener_url = f"https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url}"
+    
+    # Post the short URL to the channel
+    post_to_channel(file_name, file_opener_url)
+    
+    # Edit message with the short URL
+    processing_message.edit_text(f'File uploaded successfully. Here is your short link: {file_opener_url}')
 
 def shorten_url(long_url: str) -> str:
     shortener_url = f'https://publicearn.com/api?api=d15e1e3029f8e793ad6d02cf3343365ac15ad144&url={long_url}&format=text'
@@ -55,14 +65,15 @@ def shorten_url(long_url: str) -> str:
         if response.status_code == 200:
             return response.text.strip()
         else:
+            logger.warning(f"Shortener API response status code: {response.status_code}")
             return long_url
     except Exception as e:
         logger.error(f"Error shortening URL: {e}")
         return long_url
 
-def post_to_channel(short_url: str):
-    message = (f'Click here to access the file: {short_url}\n'
-               f'For instructions on how to open the file, visit: https://t.me/{FILE_OPENER_BOT_USERNAME}')
+def post_to_channel(file_name: str, short_url: str):
+    message = (f'File Name: {file_name}\n'
+               f'Click here to access the file: {short_url}')
     try:
         bot.send_message(chat_id=CHANNEL_ID, text=message)
     except Exception as e:
