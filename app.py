@@ -81,7 +81,6 @@ def shorten_url(long_url: str) -> str:
         if response.status_code == 200:
             return response.text.strip()
         else:
-            print(f"Failed to shorten URL: {response.status_code} - {response.text}")
             return long_url
     except Exception as e:
         print(f"Error shortening URL: {e}")
@@ -92,7 +91,8 @@ def post_to_channel(file_name: str, file_opener_url: str):
     try:
         message = (f'File Name: {file_name}\n'
                    f'Access the file using this link: {file_opener_url}')
-        bot.send_message(chat_id=CHANNEL_ID, text=message)
+        response = bot.send_message(chat_id=CHANNEL_ID, text=message)
+        print(f"Message posted to channel successfully. Response: {response}")
     except Exception as e:
         print(f"Error posting to channel: {e}")
 
@@ -112,13 +112,9 @@ dispatcher.add_handler(CommandHandler('start', start))
 # Webhook route
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    try:
-        update = Update.de_json(request.get_json(force=True), bot)
-        dispatcher.process_update(update)
-        return 'ok', 200
-    except Exception as e:
-        print(f"Error in webhook: {e}")
-        return 'error', 500
+    update = Update.de_json(request.get_json(force=True), bot)
+    dispatcher.process_update(update)
+    return 'ok', 200
 
 # Home route
 @app.route('/')
@@ -128,14 +124,14 @@ def home():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
+    webhook_url = f'{WEBHOOK_URL}'  # Ensure this URL is correct
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-        data={'url': WEBHOOK_URL}
+        data={'url': webhook_url}
     )
     if response.json().get('ok'):
         return "Webhook setup ok"
     else:
-        print(f"Webhook setup failed: {response.json()}")
         return "Webhook setup failed"
 
 if __name__ == '__main__':
