@@ -3,7 +3,7 @@ import json
 import requests
 from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
-from telegram.ext import Dispatcher, CommandHandler, CallbackContext
+from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters
 
 app = Flask(__name__)
 
@@ -24,8 +24,24 @@ dispatcher = Dispatcher(bot, None, workers=0)
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Hello, World!')
 
+# Define the handler for receiving documents
+def handle_document(update: Update, context: CallbackContext):
+    file = update.message.document.get_file()
+    file.download('downloaded_file')
+    
+    # Assume you upload file to a cloud storage and get a link
+    file_link = 'https://storagehc.vercel.app/downloaded_file'
+    
+    # Shorten the URL
+    from shortener import shorten_url
+    short_link = shorten_url(file_link)
+    
+    # Send the shortened link back to the user
+    update.message.reply_text(f'Your file link: {short_link}')
+
 # Add handlers to dispatcher
 dispatcher.add_handler(CommandHandler('start', start))
+dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
@@ -47,7 +63,7 @@ def favicon():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    webhook_url = f'https://payee-neon.vercel.app/webhook'  # Ensure this URL is correct
+    webhook_url = f'{WEBHOOK_URL}/webhook'
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
         data={'url': webhook_url}
@@ -56,14 +72,6 @@ def setup_webhook():
         return "Webhook setup ok"
     else:
         return "Webhook setup failed"
-
-# Lambda handler function
-def lambda_handler(event, context):
-    # Your function logic here
-    return {
-        'statusCode': 200,
-        'body': json.dumps({'message': 'Hello from Lambda!'})
-    }
 
 if __name__ == '__main__':
     app.run(port=5000)
