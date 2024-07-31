@@ -10,11 +10,10 @@ app = Flask(__name__)
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
-URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')  # Add this line
-CHANNEL_ID = os.getenv('CHANNEL_ID')  # Add this line
-FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')  # Add this line
+URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
+CHANNEL_ID = os.getenv('CHANNEL_ID')
+FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
 
-# Validate environment variables
 if not TELEGRAM_TOKEN:
     raise ValueError("TELEGRAM_TOKEN environment variable is not set.")
 if not WEBHOOK_URL:
@@ -39,41 +38,37 @@ def handle_document(update: Update, context: CallbackContext):
     # Send processing message
     processing_message = update.message.reply_text('Processing your file, please wait...')
 
-    file = update.message.document.get_file()
-    file_url = file.file_path
+    file = update.message.document
+    file_name = file.file_name
+    file_url = file.get_file().file_path
     
     # Process URL shortening
     short_url = shorten_url(file_url)
     
     # Post the short URL to the channel
-    post_to_channel(short_url)
+    post_to_channel(file_name, short_url)
 
     # Edit message with the short URL
     processing_message.edit_text(f'File uploaded successfully. Here is your short link: {short_url}')
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
-    shortener_url = f'https://publicearn.com/api?api=d15e1e3029f8e793ad6d02cf3343365ac15ad144&url={long_url}&format=text'
+    shortener_url = f'https://publicearn.com/api?api={URL_SHORTENER_API_KEY}&url={long_url}&format=text'
     try:
         response = requests.post(shortener_url)
         if response.status_code == 200:
             return response.text.strip()
         else:
-            print(f"Shortener API response error: {response.status_code} {response.text}")  # Debugging
             return long_url
     except Exception as e:
-        print(f"Exception in shorten_url: {str(e)}")  # Debugging
         return long_url
 
 # Post the shortened URL to the channel
-def post_to_channel(short_url: str):
-    message = (f'Click here to access the file: {short_url}\n'
+def post_to_channel(file_name: str, short_url: str):
+    message = (f'File Name: {file_name}\n'
+               f'Click here to access the file: {short_url}\n'
                f'For instructions on how to open the file, visit: https://t.me/{FILE_OPENER_BOT_USERNAME}')
-    try:
-        bot.send_message(chat_id=CHANNEL_ID, text=message)
-        print(f"Message posted to channel: {message}")  # Debugging
-    except Exception as e:
-        print(f"Error posting to channel: {str(e)}")  # Debugging
+    bot.send_message(chat_id=CHANNEL_ID, text=message)
 
 # Add handlers to dispatcher
 dispatcher.add_handler(CommandHandler('start', start))
@@ -99,22 +94,15 @@ def favicon():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
+    webhook_url = WEBHOOK_URL  # Ensure this URL is correct
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-        data={'url': WEBHOOK_URL}
+        data={'url': webhook_url}
     )
     if response.json().get('ok'):
         return "Webhook setup ok"
     else:
         return "Webhook setup failed"
-
-# Lambda handler function
-def lambda_handler(event, context):
-    # Your function logic here
-    return {
-        'statusCode': 200,
-        'body': json.dumps({'message': 'Hello from Lambda!'})
-    }
 
 if __name__ == '__main__':
     app.run(port=5000)
