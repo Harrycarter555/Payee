@@ -1,4 +1,6 @@
+import os
 import json
+import requests
 from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext
@@ -45,7 +47,7 @@ def favicon():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    webhook_url = f'https://storagehc.vercel.app/webhook'  # Ensure this URL is correct
+    webhook_url = f'https://payee-neon.vercel.app/webhook'  # Ensure this URL is correct
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
         data={'url': webhook_url}
@@ -57,7 +59,7 @@ def setup_webhook():
 
 # Lambda handler function
 def lambda_handler(event, context):
-    # Example response, replace this with your function logic
+    # Your function logic here
     return {
         'statusCode': 200,
         'body': json.dumps({'message': 'Hello from Lambda!'})
