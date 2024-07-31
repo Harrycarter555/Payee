@@ -38,18 +38,26 @@ def handle_document(update: Update, context: CallbackContext):
     # Send processing message
     processing_message = update.message.reply_text('Processing your file, please wait...')
 
-    file = update.message.document
-    file_name = file.file_name
-    file_url = file.get_file().file_path
-    
-    # Process URL shortening
-    short_url = shorten_url(file_url)
-    
-    # Post the short URL to the channel
-    post_to_channel(file_name, short_url)
+    try:
+        file = update.message.document
+        file_name = file.file_name
+        file_url = file.get_file().file_path
 
-    # Edit message with the short URL
-    processing_message.edit_text(f'File uploaded successfully. Here is your short link: {short_url}')
+        # Log file URL for debugging
+        print(f"Original file URL: {file_url}")
+
+        # Process URL shortening
+        short_url = shorten_url(file_url)
+        print(f"Shortened URL: {short_url}")
+
+        # Post the short URL to the channel
+        post_to_channel(file_name, short_url)
+
+        # Edit message with the short URL
+        processing_message.edit_text(f'File uploaded successfully. Here is your short link: {short_url}')
+    except Exception as e:
+        processing_message.edit_text(f"An error occurred: {str(e)}")
+        print(f"Error: {str(e)}")
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
@@ -59,8 +67,10 @@ def shorten_url(long_url: str) -> str:
         if response.status_code == 200:
             return response.text.strip()
         else:
+            print(f"Shortener API response: {response.text}")
             return long_url
     except Exception as e:
+        print(f"Error shortening URL: {str(e)}")
         return long_url
 
 # Post the shortened URL to the channel
