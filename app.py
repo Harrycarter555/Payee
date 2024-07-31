@@ -30,7 +30,6 @@ def start(update: Update, context: CallbackContext):
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
-    # Send processing message
     processing_message = update.message.reply_text('Processing your file, please wait...')
     
     file = update.message.document.get_file()
@@ -39,7 +38,6 @@ def handle_document(update: Update, context: CallbackContext):
     # Process URL shortening
     short_url = shorten_url(file_url)
     
-    # Ask if user wants to post the shortened URL
     update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
     
     context.user_data['short_url'] = short_url
@@ -64,10 +62,8 @@ def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
     
-    # Prepare the URL for the file opener bot
     file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url}'
 
-    # Post the shortened URL to the channel
     post_to_channel(file_name, file_opener_url)
     
     update.message.reply_text('File posted to channel successfully.')
@@ -75,12 +71,22 @@ def ask_file_name(update: Update, context: CallbackContext):
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
-    shortener_url = f'https://publicearn.com/api?api=d15e1e3029f8e793ad6d02cf3343365ac15ad144&url={long_url}&format=text'
+    alias = "CustomAlias"  # Replace with dynamic alias if needed
+    shortener_url = (
+        f'https://publicearn.com/api?api={URL_SHORTENER_API_KEY}'
+        f'&url={long_url}&alias={alias}'
+    )
     try:
-        response = requests.post(shortener_url)
+        response = requests.get(shortener_url)  # Use GET if required by the API
         if response.status_code == 200:
-            return response.text.strip()
+            short_url = response.text.strip()
+            if short_url.startswith('http'):
+                return short_url
+            else:
+                print(f"Unexpected response from URL shortener: {short_url}")
+                return long_url
         else:
+            print(f"Error response from URL shortener: {response.status_code} - {response.text}")
             return long_url
     except Exception as e:
         print(f"Error shortening URL: {e}")
@@ -124,7 +130,7 @@ def home():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    webhook_url = f'{WEBHOOK_URL}'  # Ensure this URL is correct
+    webhook_url = f'{WEBHOOK_URL}'
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
         data={'url': webhook_url}
