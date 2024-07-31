@@ -2,7 +2,7 @@ import requests
 import os
 
 # Define your URL shortener API endpoint and key here
-URL_SHORTENER_API = 'https://api.urlshortener.com/shorten'
+URL_SHORTENER_API = 'https://api.publicearn.com/shorten'
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 
 def shorten_url(long_url: str) -> str:
