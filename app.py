@@ -30,6 +30,7 @@ def start(update: Update, context: CallbackContext):
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
+    # Send processing message
     processing_message = update.message.reply_text('Processing your file, please wait...')
     
     file = update.message.document.get_file()
@@ -38,6 +39,7 @@ def handle_document(update: Update, context: CallbackContext):
     # Process URL shortening
     short_url = shorten_url(file_url)
     
+    # Ask if user wants to post the shortened URL
     update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
     
     context.user_data['short_url'] = short_url
@@ -62,8 +64,10 @@ def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
     
+    # Prepare the URL for the file opener bot
     file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url}'
 
+    # Post the shortened URL to the channel
     post_to_channel(file_name, file_opener_url)
     
     update.message.reply_text('File posted to channel successfully.')
@@ -71,36 +75,34 @@ def ask_file_name(update: Update, context: CallbackContext):
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
-    alias = "CustomAlias"  # Replace with dynamic alias if needed
-    shortener_url = (
-        f'https://publicearn.com/api?api={URL_SHORTENER_API_KEY}'
-        f'&url={long_url}&alias={alias}'
-    )
+    api_token = URL_SHORTENER_API_KEY
+    encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
+    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}&alias=CustomAlias"
+    
     try:
-        response = requests.get(shortener_url)  # Use GET if required by the API
-        if response.status_code == 200:
-            short_url = response.text.strip()
-            if short_url.startswith('http'):
+        response = requests.get(api_url)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        result = response.json()
+        
+        if result.get("status") == 'error':
+            print(f"Error shortening URL: {result.get('message')}")
+            return long_url
+        else:
+            short_url = result.get("shortenedUrl")
+            if short_url:
                 return short_url
             else:
-                print(f"Unexpected response from URL shortener: {short_url}")
+                print("Unexpected response format")
                 return long_url
-        else:
-            print(f"Error response from URL shortener: {response.status_code} - {response.text}")
-            return long_url
-    except Exception as e:
-        print(f"Error shortening URL: {e}")
+    except requests.RequestException as e:
+        print(f"Request error: {e}")
         return long_url
 
 # Post the shortened URL to the channel
 def post_to_channel(file_name: str, file_opener_url: str):
-    try:
-        message = (f'File Name: {file_name}\n'
-                   f'Access the file using this link: {file_opener_url}')
-        response = bot.send_message(chat_id=CHANNEL_ID, text=message)
-        print(f"Message posted to channel successfully. Response: {response}")
-    except Exception as e:
-        print(f"Error posting to channel: {e}")
+    message = (f'File Name: {file_name}\n'
+               f'Access the file using this link: {file_opener_url}')
+    bot.send_message(chat_id=CHANNEL_ID, text=message)
 
 # Add handlers to dispatcher
 conversation_handler = ConversationHandler(
@@ -130,7 +132,7 @@ def home():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    webhook_url = f'{WEBHOOK_URL}'
+    webhook_url = f'{WEBHOOK_URL}'  # Ensure this URL is correct
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
         data={'url': webhook_url}
