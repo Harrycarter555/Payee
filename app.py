@@ -1,6 +1,6 @@
 import os
 import requests
-from flask import Flask, request, send_from_directory
+from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 
@@ -77,12 +77,13 @@ def ask_file_name(update: Update, context: CallbackContext):
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
     encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
-    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"  # Use the provided API URL
+    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
 
     try:
         response = requests.get(api_url)
+        print("API Response:", response.text)  # Log the full response for debugging
         response.raise_for_status()  # Raise an exception for HTTP errors
-        short_url = response.text.strip()  # Extract the short URL from the response
+        short_url = response.text.strip()
         if short_url:
             return short_url
         else:
@@ -114,14 +115,13 @@ dispatcher.add_handler(CommandHandler('start', start))
 # Webhook route
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    dispatcher.process_update(update)
-    return 'ok', 200
-
-# Serve favicon.ico
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory('static', 'favicon.ico')
+    try:
+        update = Update.de_json(request.get_json(force=True), bot)
+        dispatcher.process_update(update)
+        return 'ok', 200
+    except Exception as e:
+        print(f'Error processing update: {e}')
+        return 'error', 500
 
 # Home route
 @app.route('/')
