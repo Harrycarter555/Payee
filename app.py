@@ -185,4 +185,4 @@ def favicon():
 
 if __name__ == '__main__':
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB
-    app.run(port=5000)
+    app.run(port=5000, threaded=True)
