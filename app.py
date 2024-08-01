@@ -1,6 +1,6 @@
+from flask import Flask, request, send_from_directory
 import os
 import requests
-from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 
@@ -35,7 +35,7 @@ def handle_document(update: Update, context: CallbackContext):
     file = update.message.document.get_file()
     file_url = file.file_path
 
-    # Process file directly (no async)
+    # Process URL shortening
     short_url = shorten_url(file_url)
     
     # Ask if user wants to post the shortened URL
