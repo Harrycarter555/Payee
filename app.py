@@ -1,4 +1,5 @@
 import os
+import base64
 import requests
 from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
@@ -53,11 +54,12 @@ def start(update: Update, context: CallbackContext):
     try:
         if context.args:
             encoded_url = context.args[0]
-            decoded_url = base64.b64decode(encoded_url).decode('utf-8')
-            logging.info(f"Decoded URL: {decoded_url}")
+            # Decode the base64 encoded parameter
+            decoded_param = base64.urlsafe_b64decode(encoded_url + '==').decode('utf-8')
+            logging.info(f"Decoded parameter: {decoded_param}")
 
             # Shorten the decoded URL
-            shortened_link = shorten_url(decoded_url)
+            shortened_link = shorten_url(decoded_param)
             logging.info(f"Shortened URL: {shortened_link}")
 
             # Provide information or further processing
@@ -107,8 +109,9 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
-    short_url_encoded = requests.utils.quote(short_url, safe='')
-    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}'
+    # Base64 encode the short_url
+    encoded_url = base64.urlsafe_b64encode(short_url.encode()).decode().rstrip('=')
+    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}'
 
     # Post the shortened URL to the channel
     post_to_channel(file_name, file_opener_url)
