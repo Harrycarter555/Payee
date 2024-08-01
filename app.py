@@ -31,16 +31,16 @@ def start(update: Update, context: CallbackContext):
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
     processing_message = update.message.reply_text('Processing your file, please wait...')
-
+    
     file = update.message.document.get_file()
     file_url = file.file_path
 
     # Process URL shortening
     short_url = shorten_url(file_url)
-
+    
     # Ask if user wants to post the shortened URL
     update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-
+    
     context.user_data['short_url'] = short_url
     return ASK_POST_CONFIRMATION
 
@@ -53,7 +53,7 @@ def shorten_url(long_url: str) -> str:
     try:
         response = requests.get(api_url)
         response.raise_for_status()  # Raise an exception for HTTP errors
-
+        
         response_data = response.json()
         if response_data.get("status") == "success":
             short_url = response_data.get("shortenedUrl", "")
@@ -74,7 +74,7 @@ def post_to_channel(file_name: str, file_opener_url: str):
 # Define handlers for conversation
 def ask_post_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
-
+    
     if user_response == 'yes':
         update.message.reply_text('Please provide the file name:')
         return ASK_FILE_NAME
@@ -93,7 +93,7 @@ def ask_file_name(update: Update, context: CallbackContext):
 
     # Post the shortened URL to the channel
     post_to_channel(file_name, file_opener_url)
-
+    
     update.message.reply_text('File posted to channel successfully.')
     return ConversationHandler.END
 
@@ -138,6 +138,11 @@ def setup_webhook():
         return "Webhook setup ok"
     else:
         return "Webhook setup failed"
+
+# Favicon route
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory('static', 'favicon.ico')
 
 if __name__ == '__main__':
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB
