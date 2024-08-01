@@ -1,11 +1,9 @@
-from flask import Flask, request, send_from_directory
 import os
 import requests
+from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
-import base64
 import logging
-from urllib.parse import quote
 
 app = Flask(__name__)
 
@@ -23,10 +21,10 @@ if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHA
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=0)
 
-# Define states for conversation handler
-ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
-# Shorten URL using the URL shortener API
+# Function to shorten URL
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
     encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
@@ -46,6 +44,9 @@ def shorten_url(long_url: str) -> str:
     except requests.RequestException as e:
         logging.error(f"Request error: {e}")
         return long_url
+
+# Define states for conversation handler
+ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
 
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
@@ -106,18 +107,13 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
+    short_url_encoded = requests.utils.quote(short_url, safe='')
+    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}'
 
-    if short_url:
-        short_url_encoded = quote(short_url, safe='')  # URL encode the short URL
-        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}'
-
-        # Post the shortened URL to the channel
-        post_to_channel(file_name, file_opener_url)
-        
-        update.message.reply_text('File posted to channel successfully.')
-    else:
-        update.message.reply_text('Failed to retrieve the shortened URL.')
+    # Post the shortened URL to the channel
+    post_to_channel(file_name, file_opener_url)
     
+    update.message.reply_text('File posted to channel successfully.')
     return ConversationHandler.END
 
 # Add handlers to dispatcher
