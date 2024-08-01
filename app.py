@@ -3,6 +3,8 @@ import os
 import requests
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
+import base64
+import logging
 
 app = Flask(__name__)
 
@@ -25,8 +27,23 @@ ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
 
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text('Upload your file')
-    return ConversationHandler.END
+    try:
+        if context.args:
+            encoded_url = context.args[0]
+            decoded_url = base64.b64decode(encoded_url).decode('utf-8')
+            logging.info(f"Decoded URL: {decoded_url}")
+
+            # Shorten the decoded URL
+            shortened_link = shorten_url(decoded_url)
+            logging.info(f"Shortened URL: {shortened_link}")
+
+            # Provide information or further processing
+            update.message.reply_text(f'Here is your shortened link: {shortened_link}')
+        else:
+            update.message.reply_text('Welcome! Please use the link provided in the channel.')
+    except Exception as e:
+        logging.error(f"Error handling /start command: {e}")
+        update.message.reply_text('An error occurred. Please try again later.')
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
@@ -59,10 +76,10 @@ def shorten_url(long_url: str) -> str:
             short_url = response_data.get("shortenedUrl", "")
             if short_url:
                 return short_url
-        print("Unexpected response format")
+        logging.error("Unexpected response format")
         return long_url
     except requests.RequestException as e:
-        print(f"Request error: {e}")
+        logging.error(f"Request error: {e}")
         return long_url
 
 # Post the shortened URL to the channel
@@ -118,7 +135,7 @@ def webhook():
         dispatcher.process_update(update)
         return 'ok', 200
     except Exception as e:
-        print(f'Error processing update: {e}')
+        logging.error(f'Error processing update: {e}')
         return 'error', 500
 
 # Home route
@@ -129,10 +146,9 @@ def home():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    webhook_url = f'{WEBHOOK_URL}'  # Ensure this URL is correct
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-        data={'url': webhook_url}
+        data={'url': WEBHOOK_URL}
     )
     if response.json().get('ok'):
         return "Webhook setup ok"
