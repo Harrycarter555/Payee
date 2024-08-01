@@ -3,7 +3,9 @@ import os
 import requests
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
+import base64
 import logging
+from urllib.parse import quote
 
 app = Flask(__name__)
 
@@ -21,11 +23,29 @@ if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHA
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=0)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-
 # Define states for conversation handler
 ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
+
+# Shorten URL using the URL shortener API
+def shorten_url(long_url: str) -> str:
+    api_token = URL_SHORTENER_API_KEY
+    encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
+    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
+
+    try:
+        response = requests.get(api_url)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        
+        response_data = response.json()
+        if response_data.get("status") == "success":
+            short_url = response_data.get("shortenedUrl", "")
+            if short_url:
+                return short_url
+        logging.error("Unexpected response format")
+        return long_url
+    except requests.RequestException as e:
+        logging.error(f"Request error: {e}")
+        return long_url
 
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
@@ -39,7 +59,7 @@ def start(update: Update, context: CallbackContext):
             shortened_link = shorten_url(decoded_url)
             logging.info(f"Shortened URL: {shortened_link}")
 
-            # Provide information with shortened URL
+            # Provide information or further processing
             update.message.reply_text(f'Here is your shortened link: {shortened_link}')
         else:
             update.message.reply_text('Welcome! Please use the link provided in the channel.')
@@ -62,27 +82,6 @@ def handle_document(update: Update, context: CallbackContext):
     
     context.user_data['short_url'] = short_url
     return ASK_POST_CONFIRMATION
-
-# Shorten URL using the URL shortener API
-def shorten_url(long_url: str) -> str:
-    api_token = URL_SHORTENER_API_KEY
-    encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
-    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
-
-    try:
-        response = requests.get(api_url)
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        
-        response_data = response.json()
-        if response_data.get("status") == "success":
-            short_url = response_data.get("shortenedUrl", "")
-            if short_url:
-                return short_url
-        logging.error("Unexpected response format")
-        return long_url
-    except requests.RequestException as e:
-        logging.error(f"Request error: {e}")
-        return long_url
 
 # Post the shortened URL to the channel
 def post_to_channel(file_name: str, file_opener_url: str):
@@ -107,13 +106,18 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
-    short_url_encoded = requests.utils.quote(short_url, safe='')
-    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}'
 
-    # Post the shortened URL to the channel
-    post_to_channel(file_name, file_opener_url)
+    if short_url:
+        short_url_encoded = quote(short_url, safe='')  # URL encode the short URL
+        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}'
+
+        # Post the shortened URL to the channel
+        post_to_channel(file_name, file_opener_url)
+        
+        update.message.reply_text('File posted to channel successfully.')
+    else:
+        update.message.reply_text('Failed to retrieve the shortened URL.')
     
-    update.message.reply_text('File posted to channel successfully.')
     return ConversationHandler.END
 
 # Add handlers to dispatcher
