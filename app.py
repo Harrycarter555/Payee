@@ -3,7 +3,6 @@ import os
 import requests
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
-import base64
 import logging
 
 app = Flask(__name__)
@@ -22,6 +21,9 @@ if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHA
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=0)
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+
 # Define states for conversation handler
 ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
 
@@ -37,7 +39,7 @@ def start(update: Update, context: CallbackContext):
             shortened_link = shorten_url(decoded_url)
             logging.info(f"Shortened URL: {shortened_link}")
 
-            # Provide information or further processing
+            # Provide information with shortened URL
             update.message.reply_text(f'Here is your shortened link: {shortened_link}')
         else:
             update.message.reply_text('Welcome! Please use the link provided in the channel.')
