@@ -139,11 +139,6 @@ def setup_webhook():
     else:
         return "Webhook setup failed"
 
-# Favicon route
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory('static', 'favicon.ico')
-
 if __name__ == '__main__':
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB
     app.run(port=5000)
