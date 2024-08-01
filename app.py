@@ -1,7 +1,6 @@
 import os
 import requests
 from flask import Flask, request, send_from_directory
-from celery import Celery
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 
@@ -21,15 +20,6 @@ if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHA
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=0)
 
-# Set up Celery
-celery = Celery('tasks', broker='redis://localhost:6379/0', backend='redis://localhost:6379/0')
-
-@celery.task
-def process_file(file_url):
-    # Implement file processing and URL shortening
-    short_url = shorten_url(file_url)
-    return short_url
-
 # Define states for conversation handler
 ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
 
@@ -45,13 +35,14 @@ def handle_document(update: Update, context: CallbackContext):
     file = update.message.document.get_file()
     file_url = file.file_path
 
-    # Start asynchronous processing
-    task = process_file.delay(file_url)
-
-    # Save task ID for status checking
-    context.user_data['task_id'] = task.id
-    update.message.reply_text('Your file is being processed. You will be notified when the processing is complete.')
-    return ConversationHandler.END
+    # Process file directly (no async)
+    short_url = shorten_url(file_url)
+    
+    # Ask if user wants to post the shortened URL
+    update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+    
+    context.user_data['short_url'] = short_url
+    return ASK_POST_CONFIRMATION
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
@@ -96,21 +87,14 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
-    task_id = context.user_data.get('task_id')
-    task = process_file.AsyncResult(task_id)
-    
-    if task.state == 'SUCCESS':
-        short_url = task.result
-        short_url_encoded = requests.utils.quote(short_url, safe='')
-        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}'
+    short_url = context.user_data.get('short_url')
+    short_url_encoded = requests.utils.quote(short_url, safe='')
+    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}'
 
-        # Post the shortened URL to the channel
-        post_to_channel(file_name, file_opener_url)
-        
-        update.message.reply_text('File posted to channel successfully.')
-    else:
-        update.message.reply_text('There was an issue processing your file.')
+    # Post the shortened URL to the channel
+    post_to_channel(file_name, file_opener_url)
     
+    update.message.reply_text('File posted to channel successfully.')
     return ConversationHandler.END
 
 # Add handlers to dispatcher
