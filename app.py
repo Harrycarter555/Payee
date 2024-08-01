@@ -72,25 +72,43 @@ def start(update: Update, context: CallbackContext):
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
-    processing_message = update.message.reply_text('Processing your file, please wait...')
-    
-    file = update.message.document.get_file()
-    file_url = file.file_path
+    try:
+        processing_message = update.message.reply_text('Processing your file, please wait...')
+        
+        file = update.message.document.get_file()
+        file_url = file.file_path
+        
+        logging.info(f"Received file URL: {file_url}")
 
-    # Process URL shortening
-    short_url = shorten_url(file_url)
-    
-    # Ask if user wants to post the shortened URL
-    update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-    
-    context.user_data['short_url'] = short_url
-    return ASK_POST_CONFIRMATION
+        # Process URL shortening
+        short_url = shorten_url(file_url)
+        
+        logging.info(f"Shortened URL: {short_url}")
+        
+        # Check if the shortened URL is valid
+        if not short_url.startswith('http'):
+            raise ValueError("Shortened URL is invalid.")
+        
+        # Ask if user wants to post the shortened URL
+        update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        
+        context.user_data['short_url'] = short_url
+        return ASK_POST_CONFIRMATION
+
+    except Exception as e:
+        logging.error(f"Error processing document: {e}")
+        update.message.reply_text('An error occurred while processing your file. Please try again later.')
+        return ConversationHandler.END
 
 # Post the shortened URL to the channel
 def post_to_channel(file_name: str, file_opener_url: str):
-    message = (f'File Name: {file_name}\n'
-               f'Access the file using this link: {file_opener_url}')
-    bot.send_message(chat_id=CHANNEL_ID, text=message)
+    try:
+        message = (f'File Name: {file_name}\n'
+                   f'Access the file using this link: {file_opener_url}')
+        bot.send_message(chat_id=CHANNEL_ID, text=message)
+        logging.info(f"Posted to channel: {message}")
+    except Exception as e:
+        logging.error(f"Error posting to channel: {e}")
 
 # Define handlers for conversation
 def ask_post_confirmation(update: Update, context: CallbackContext):
