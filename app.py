@@ -64,8 +64,8 @@ def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
     
-    # Encode the short URL and prepare the URL for the file opener bot
-    short_url_encoded = requests.utils.quote(short_url)
+    # URL encode the shortened URL for the start parameter
+    short_url_encoded = requests.utils.quote(short_url, safe='')
     file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}'
 
     # Post the shortened URL to the channel
