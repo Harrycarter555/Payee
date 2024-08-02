@@ -55,13 +55,16 @@ def start(update: Update, context: CallbackContext):
         if context.args and len(context.args) == 2:
             encoded_url = context.args[0]
             file_name = context.args[1]
-            decoded_url = base64.urlsafe_b64decode(encoded_url + '==').decode('utf-8')
+            
+            # Decode the base64 encoded URL
+            decoded_url = base64.urlsafe_b64decode(encoded_url).decode('utf-8')
             logging.info(f"Decoded URL: {decoded_url}")
 
+            # Shorten the URL
             shortened_link = shorten_url(decoded_url)
             logging.info(f"Shortened URL: {shortened_link}")
 
-            # Prepare message
+            # Prepare and send message
             message = (f'Here is your shortened link: {shortened_link}\n\n'
                        f'File Name: {file_name}')
             update.message.reply_text(message)
