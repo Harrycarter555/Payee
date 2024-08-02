@@ -28,13 +28,12 @@ logging.basicConfig(level=logging.INFO)
 # Function to shorten URL
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
-    encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
+    encoded_url = requests.utils.quote(long_url)
     api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
 
     try:
         response = requests.get(api_url)
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        
+        response.raise_for_status()
         response_data = response.json()
         if response_data.get("status") == "success":
             short_url = response_data.get("shortenedUrl", "")
@@ -54,24 +53,19 @@ def start(update: Update, context: CallbackContext):
     try:
         if context.args and len(context.args) == 1:
             combined_encoded_str = context.args[0]
-            
-            # Decode the combined base64 string
-            padded_encoded_str = combined_encoded_str + '=='  # Add padding for base64 compliance
+            padded_encoded_str = combined_encoded_str + '=='
             decoded_str = base64.urlsafe_b64decode(padded_encoded_str).decode('utf-8')
             logging.info(f"Decoded String: {decoded_str}")
-            
-            # Split into URL and file name using the delimiter
+
             delimiter = '|'
             if delimiter in decoded_str:
                 decoded_url, file_name = decoded_str.split(delimiter, 1)
                 logging.info(f"Decoded URL: {decoded_url}")
                 logging.info(f"File Name: {file_name}")
 
-                # Shorten the URL
                 shortened_link = shorten_url(decoded_url)
                 logging.info(f"Shortened URL: {shortened_link}")
 
-                # Prepare and send message
                 message = (f'Here is your shortened link: {shortened_link}\n\n'
                            f'File Name: {file_name}')
                 update.message.reply_text(message)
@@ -87,21 +81,17 @@ def start(update: Update, context: CallbackContext):
 def handle_document(update: Update, context: CallbackContext):
     try:
         update.message.reply_text('Processing your file, please wait...')
-        
         file = update.message.document.get_file()
         file_url = file.file_path
-        
         logging.info(f"Received file URL: {file_url}")
 
         short_url = shorten_url(file_url)
-        
         logging.info(f"Shortened URL: {short_url}")
-        
+
         if not short_url.startswith('http'):
             raise ValueError("Shortened URL is invalid.")
-        
+
         update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-        
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
 
@@ -138,7 +128,7 @@ def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
     encoded_url = base64.urlsafe_b64encode(short_url.encode()).decode().rstrip('=')
-    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start=={encoded_url}||{file_name}'
+    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}||{file_name}'
 
     post_to_channel(file_name, file_opener_url)
     
