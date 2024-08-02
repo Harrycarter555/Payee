@@ -56,7 +56,7 @@ def start(update: Update, context: CallbackContext):
             combined_encoded_str = context.args[0]
             
             # Decode the combined base64 string
-            decoded_str = base64.urlsafe_b64decode(combined_encoded_str).decode('utf-8')
+            decoded_str = base64.urlsafe_b64decode(combined_encoded_str + '==').decode('utf-8')
             logging.info(f"Decoded String: {decoded_str}")
             
             # Split into URL and file name using the delimiter
