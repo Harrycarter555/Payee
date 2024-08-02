@@ -52,24 +52,32 @@ ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
     try:
-        if context.args and len(context.args) == 2:
-            encoded_url = context.args[0]
-            file_name = context.args[1]
+        if context.args and len(context.args) == 1:
+            combined_encoded_str = context.args[0]
             
-            # Decode the base64 encoded URL
-            decoded_url = base64.urlsafe_b64decode(encoded_url).decode('utf-8')
-            logging.info(f"Decoded URL: {decoded_url}")
+            # Decode the combined base64 string
+            decoded_str = base64.urlsafe_b64decode(combined_encoded_str).decode('utf-8')
+            logging.info(f"Decoded String: {decoded_str}")
+            
+            # Split into URL and file name using the delimiter
+            delimiter = '||'
+            if delimiter in decoded_str:
+                decoded_url, file_name = decoded_str.split(delimiter, 1)
+                logging.info(f"Decoded URL: {decoded_url}")
+                logging.info(f"File Name: {file_name}")
 
-            # Shorten the URL
-            shortened_link = shorten_url(decoded_url)
-            logging.info(f"Shortened URL: {shortened_link}")
+                # Shorten the URL
+                shortened_link = shorten_url(decoded_url)
+                logging.info(f"Shortened URL: {shortened_link}")
 
-            # Prepare and send message
-            message = (f'Here is your shortened link: {shortened_link}\n\n'
-                       f'File Name: {file_name}')
-            update.message.reply_text(message)
+                # Prepare and send message
+                message = (f'Here is your shortened link: {shortened_link}\n\n'
+                           f'File Name: {file_name}')
+                update.message.reply_text(message)
+            else:
+                update.message.reply_text('Invalid format of the encoded string.')
         else:
-            update.message.reply_text('Please provide both the encoded URL and file name in the command.')
+            update.message.reply_text('Please provide the encoded string in the command.')
     except Exception as e:
         logging.error(f"Error handling /start command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
