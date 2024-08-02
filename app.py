@@ -52,17 +52,18 @@ ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
     try:
-        if context.args:
+        if context.args and len(context.args) == 2:
             encoded_url = context.args[0]
-            decoded_param = base64.urlsafe_b64decode(encoded_url + '==').decode('utf-8')
-            logging.info(f"Decoded parameter: {decoded_param}")
+            file_name = context.args[1]
+            decoded_url = base64.urlsafe_b64decode(encoded_url + '==').decode('utf-8')
+            logging.info(f"Decoded URL: {decoded_url}")
 
-            shortened_link = shorten_url(decoded_param)
+            shortened_link = shorten_url(decoded_url)
             logging.info(f"Shortened URL: {shortened_link}")
 
-            update.message.reply_text(f'Here is your shortened link: {shortened_link}')
+            update.message.reply_text(f'Here is your shortened link: {shortened_link}\n\nFile Name: {file_name}')
         else:
-            update.message.reply_text('Welcome! Please use the link provided in the channel.')
+            update.message.reply_text('Please provide both the encoded URL and file name in the command.')
     except Exception as e:
         logging.error(f"Error handling /start command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
