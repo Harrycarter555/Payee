@@ -100,7 +100,7 @@ def handle_document(update: Update, context: CallbackContext):
         if not short_url.startswith('http'):
             raise ValueError("Shortened URL is invalid.")
         
-        update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        update.message.reply_text('File uploaded successfully. Do you want to post this link to the channel? (yes/no)')
         
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
@@ -137,8 +137,12 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
-    encoded_url = base64.urlsafe_b64encode(short_url.encode()).decode().rstrip('=')
-    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}||{file_name}'
+
+    # Combine and encode URL and file name
+    combined_str = f"{short_url}||{file_name}"
+    encoded_url = base64.urlsafe_b64encode(combined_str.encode()).decode().rstrip('=')
+    
+    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}'
 
     post_to_channel(file_name, file_opener_url)
     
