@@ -1,7 +1,7 @@
 import os
 import base64
 import requests
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import logging
@@ -24,6 +24,9 @@ dispatcher = Dispatcher(bot, None, workers=0)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
+
+# Increase the maximum content length to 2 GB
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB
 
 # Function to shorten URL
 def shorten_url(long_url: str) -> str:
@@ -187,5 +190,4 @@ def setup_webhook():
         return "Webhook setup failed"
 
 if __name__ == '__main__':
-    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB
     app.run(port=5000)
