@@ -28,12 +28,13 @@ logging.basicConfig(level=logging.INFO)
 # Function to shorten URL
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
-    encoded_url = requests.utils.quote(long_url)
+    encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
     api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
 
     try:
         response = requests.get(api_url)
-        response.raise_for_status()
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        
         response_data = response.json()
         if response_data.get("status") == "success":
             short_url = response_data.get("shortenedUrl", "")
@@ -53,26 +54,31 @@ def start(update: Update, context: CallbackContext):
     try:
         if context.args and len(context.args) == 1:
             combined_encoded_str = context.args[0]
-            padded_encoded_str = combined_encoded_str + '=='
+            
+            # Decode the combined base64 string
+            padded_encoded_str = combined_encoded_str + '=='  # Add padding for base64 compliance
             decoded_str = base64.urlsafe_b64decode(padded_encoded_str).decode('utf-8')
             logging.info(f"Decoded String: {decoded_str}")
-
-            delimiter = '|'
+            
+            # Split into URL and file name using the delimiter
+            delimiter = '||'
             if delimiter in decoded_str:
                 decoded_url, file_name = decoded_str.split(delimiter, 1)
                 logging.info(f"Decoded URL: {decoded_url}")
                 logging.info(f"File Name: {file_name}")
 
+                # Shorten the URL
                 shortened_link = shorten_url(decoded_url)
                 logging.info(f"Shortened URL: {shortened_link}")
 
+                # Prepare and send message
                 message = (f'Here is your shortened link: {shortened_link}\n\n'
                            f'File Name: {file_name}')
                 update.message.reply_text(message)
             else:
                 update.message.reply_text('Invalid format of the encoded string.')
         else:
-            update.message.reply_text('Upload Your File.')
+            update.message.reply_text('Please provide the encoded string in the command.')
     except Exception as e:
         logging.error(f"Error handling /start command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
@@ -81,17 +87,21 @@ def start(update: Update, context: CallbackContext):
 def handle_document(update: Update, context: CallbackContext):
     try:
         update.message.reply_text('Processing your file, please wait...')
+        
         file = update.message.document.get_file()
         file_url = file.file_path
+        
         logging.info(f"Received file URL: {file_url}")
 
         short_url = shorten_url(file_url)
+        
         logging.info(f"Shortened URL: {short_url}")
-
+        
         if not short_url.startswith('http'):
             raise ValueError("Shortened URL is invalid.")
-
+        
         update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
 
