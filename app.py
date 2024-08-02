@@ -1,7 +1,7 @@
 import os
 import base64
 import requests
-from flask import Flask, request, jsonify
+from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import logging
@@ -64,7 +64,7 @@ def start(update: Update, context: CallbackContext):
             logging.info(f"Decoded String: {decoded_str}")
             
             # Split into URL and file name using the delimiter
-            delimiter = '||'
+            delimiter = '&&'
             if delimiter in decoded_str:
                 decoded_url, file_name = decoded_str.split(delimiter, 1)
                 logging.info(f"Decoded URL: {decoded_url}")
@@ -141,7 +141,7 @@ def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
     encoded_url = base64.urlsafe_b64encode(short_url.encode()).decode().rstrip('=')
-    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}&&{file_ name}'
+    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}&&{file_name}'
 
     post_to_channel(file_name, file_opener_url)
     
