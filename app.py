@@ -61,7 +61,10 @@ def start(update: Update, context: CallbackContext):
             shortened_link = shorten_url(decoded_url)
             logging.info(f"Shortened URL: {shortened_link}")
 
-            update.message.reply_text(f'Here is your shortened link: {shortened_link}\n\nFile Name: {file_name}')
+            # Prepare message
+            message = (f'Here is your shortened link: {shortened_link}\n\n'
+                       f'File Name: {file_name}')
+            update.message.reply_text(message)
         else:
             update.message.reply_text('Please provide both the encoded URL and file name in the command.')
     except Exception as e:
