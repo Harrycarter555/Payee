@@ -137,7 +137,7 @@ def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
     encoded_url = base64.urlsafe_b64encode(short_url.encode()).decode().rstrip('=')
-    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}'
+    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}&file_name={file_name}'
 
     post_to_channel(file_name, file_opener_url)
     
