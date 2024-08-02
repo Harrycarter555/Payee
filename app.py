@@ -1,7 +1,7 @@
 import os
 import base64
 import requests
-from flask import Flask, request, send_from_directory
+from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import logging
@@ -40,7 +40,7 @@ def shorten_url(long_url: str) -> str:
             short_url = response_data.get("shortenedUrl", "")
             if short_url:
                 return short_url
-        logging.error("Unexpected response format")
+        logging.error("Unexpected response format or empty shortened URL")
         return long_url
     except requests.RequestException as e:
         logging.error(f"Request error: {e}")
@@ -56,11 +56,12 @@ def start(update: Update, context: CallbackContext):
             combined_encoded_str = context.args[0]
             
             # Decode the combined base64 string
-            decoded_str = base64.urlsafe_b64decode(combined_encoded_str + '==').decode('utf-8')
+            padded_encoded_str = combined_encoded_str + '=='  # Add padding for base64 compliance
+            decoded_str = base64.urlsafe_b64decode(padded_encoded_str).decode('utf-8')
             logging.info(f"Decoded String: {decoded_str}")
             
             # Split into URL and file name using the delimiter
-            delimiter = '||'
+            delimiter = '|'
             if delimiter in decoded_str:
                 decoded_url, file_name = decoded_str.split(delimiter, 1)
                 logging.info(f"Decoded URL: {decoded_url}")
@@ -184,11 +185,6 @@ def setup_webhook():
         return "Webhook setup ok"
     else:
         return "Webhook setup failed"
-
-# Favicon route
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory('static', 'favicon.ico')
 
 if __name__ == '__main__':
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB
