@@ -40,7 +40,7 @@ def shorten_url(long_url: str) -> str:
             short_url = response_data.get("shortenedUrl", "")
             if short_url:
                 return short_url
-        logging.error("Unexpected response format or empty shortened URL")
+        logging.error("Unexpected response format")
         return long_url
     except requests.RequestException as e:
         logging.error(f"Request error: {e}")
@@ -100,7 +100,7 @@ def handle_document(update: Update, context: CallbackContext):
         if not short_url.startswith('http'):
             raise ValueError("Shortened URL is invalid.")
         
-        update.message.reply_text('File uploaded successfully. Do you want to post this link to the channel? (yes/no)')
+        update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
         
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
@@ -137,12 +137,8 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
-
-    # Combine and encode URL and file name
-    combined_str = f"{short_url}||{file_name}"
-    encoded_url = base64.urlsafe_b64encode(combined_str.encode()).decode().rstrip('=')
-    
-    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}'
+    encoded_url = base64.urlsafe_b64encode(short_url.encode()).decode().rstrip('=')
+    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}||{file_name}'
 
     post_to_channel(file_name, file_opener_url)
     
@@ -192,4 +188,4 @@ def setup_webhook():
 
 if __name__ == '__main__':
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB
-    app.run(port=5000, threaded=True)
+    app.run(port=5000)
