@@ -72,7 +72,7 @@ def start(update: Update, context: CallbackContext):
             else:
                 update.message.reply_text('Invalid format of the encoded string.')
         else:
-            update.message.reply_text('Please provide the encoded string in the command.')
+            update.message.reply_text('Upload Your File.')
     except Exception as e:
         logging.error(f"Error handling /start command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
