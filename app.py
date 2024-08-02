@@ -54,15 +54,12 @@ def start(update: Update, context: CallbackContext):
     try:
         if context.args:
             encoded_url = context.args[0]
-            # Decode the base64 encoded parameter
             decoded_param = base64.urlsafe_b64decode(encoded_url + '==').decode('utf-8')
             logging.info(f"Decoded parameter: {decoded_param}")
 
-            # Shorten the decoded URL
             shortened_link = shorten_url(decoded_param)
             logging.info(f"Shortened URL: {shortened_link}")
 
-            # Provide information or further processing
             update.message.reply_text(f'Here is your shortened link: {shortened_link}')
         else:
             update.message.reply_text('Welcome! Please use the link provided in the channel.')
@@ -73,23 +70,20 @@ def start(update: Update, context: CallbackContext):
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
     try:
-        processing_message = update.message.reply_text('Processing your file, please wait...')
+        update.message.reply_text('Processing your file, please wait...')
         
         file = update.message.document.get_file()
         file_url = file.file_path
         
         logging.info(f"Received file URL: {file_url}")
 
-        # Process URL shortening
         short_url = shorten_url(file_url)
         
         logging.info(f"Shortened URL: {short_url}")
         
-        # Check if the shortened URL is valid
         if not short_url.startswith('http'):
             raise ValueError("Shortened URL is invalid.")
         
-        # Ask if user wants to post the shortened URL
         update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
         
         context.user_data['short_url'] = short_url
@@ -127,11 +121,9 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
-    # Base64 encode the short_url
     encoded_url = base64.urlsafe_b64encode(short_url.encode()).decode().rstrip('=')
     file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}'
 
-    # Post the shortened URL to the channel
     post_to_channel(file_name, file_opener_url)
     
     update.message.reply_text('File posted to channel successfully.')
