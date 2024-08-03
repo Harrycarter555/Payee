@@ -8,7 +8,6 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from telegram import Bot
 from telegram.ext import Dispatcher
-from handlers import start, handle_document, ask_shorten_confirmation, ask_post_confirmation, post_to_channel
 
 app = Flask(__name__)
 
@@ -51,6 +50,13 @@ logging.basicConfig(level=logging.DEBUG)
 # Set maximum content length to None for unlimited size
 app.config['MAX_CONTENT_LENGTH'] = None
 
+# Import handlers after initializing the necessary components
+from handlers import conversation_handler
+
+# Add handlers to dispatcher
+dispatcher.add_handler(CommandHandler('start', start))
+dispatcher.add_handler(conversation_handler)
+
 # Webhook route
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -80,10 +86,4 @@ def setup_webhook():
         return "Webhook setup failed"
 
 if __name__ == '__main__':
-    from handlers import conversation_handler  # Import after defining handlers
-
-    # Add handlers to dispatcher
-    dispatcher.add_handler(CommandHandler('start', start))
-    dispatcher.add_handler(conversation_handler)
-
     app.run(port=5000, debug=True)
