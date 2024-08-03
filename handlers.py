@@ -1,5 +1,3 @@
-# handlers.py
-
 import base64
 import io
 import logging
@@ -7,7 +5,7 @@ import requests
 from googleapiclient.http import MediaIoBaseUpload
 from telegram import Update
 from telegram.ext import CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
-from app import drive_service, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME
+from app import drive_service, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME, GOOGLE_DRIVE_FOLDER_ID
 
 # Define states for conversation handler
 ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(2)
