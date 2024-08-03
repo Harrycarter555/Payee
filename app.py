@@ -228,4 +228,7 @@ def webhook():
 # Home route
 @app.route('/')
 def home():
-    return 'Hello, this is your bot.
+    return 'Hello, this is your bot.'
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
