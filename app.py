@@ -3,7 +3,7 @@ import json
 import logging
 from flask import Flask, request
 from telegram import Bot, Update
-from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
+from telegram.ext import Dispatcher, CommandHandler, CallbackContext, ConversationHandler
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -18,7 +18,6 @@ from handlers import conversation_handler
 
 # Add handlers to dispatcher
 dispatcher.add_handler(conversation_handler)
-dispatcher.add_handler(CommandHandler('start', start))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
