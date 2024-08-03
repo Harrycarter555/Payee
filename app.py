@@ -176,6 +176,7 @@ def webhook():
     try:
         update = Update.de_json(request.get_json(force=True), bot)
         application.process_update(update)
+        logging.info(f"Update received: {update}")
         return 'ok', 200
     except Exception as e:
         logging.error(f'Error processing update: {e}')
