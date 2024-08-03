@@ -3,11 +3,13 @@ import base64
 import requests
 import json
 import logging
+import io
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
+from googleapiclient.http import MediaIoBaseUpload
 
 app = Flask(__name__)
 
@@ -81,14 +83,16 @@ def upload_to_drive(file_content: bytes, file_name: str):
             'name': file_name,
             'parents': [GOOGLE_DRIVE_FOLDER_ID]
         }
-        media = requests.post(file_content).content
-        drive_service.files().create(
+        media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype='application/octet-stream')
+        
+        file = drive_service.files().create(
             body=file_metadata,
             media_body=media,
             fields='id'
         ).execute()
+        
         logging.info(f"Uploaded file to Google Drive: {file_name}")
-        file_id = drive_service.files().list(q=f"name='{file_name}'", fields="files(id)").execute().get('files', [])[0]['id']
+        file_id = file.get('id')
         return f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
     except Exception as e:
         logging.error(f"Error uploading to Google Drive: {e}")
@@ -162,7 +166,8 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
     
     if user_response == 'yes':
         file_opener_url = context.user_data.get('short_link')
-        post_to_channel(file_opener_url)
+        file_name = update.message.document.file_name
+        post_to_channel(file_opener_url, file_name)
         update.message.reply_text('File posted to channel successfully.')
         return ConversationHandler.END
     elif user_response == 'no':
@@ -172,11 +177,16 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
         update.message.reply_text('Please respond with "yes" or "no".')
         return ASK_POST_CONFIRMATION
 
-def post_to_channel(file_opener_url: str):
+def post_to_channel(file_opener_url: str, file_name: str):
     try:
-        encoded_url = base64.b64encode(file_opener_url.encode()).decode()
-        message = f"https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}"
-        bot.send_message(chat_id=CHANNEL_ID, text=message)
+        # Basic styling with Markdown
+        message = (
+            f"*File Name:* {file_name}\n\n"
+            f"[File Link]({file_opener_url})\n"
+            f"[Open with File Opener Bot](https://t.me/{FILE_OPENER_BOT_USERNAME}?start={base64.b64encode(file_opener_url.encode()).decode()})"
+        )
+        
+        bot.send_message(chat_id=CHANNEL_ID, text=message, parse_mode='Markdown')
         logging.info(f"Posted to channel: {message}")
     except Exception as e:
         logging.error(f"Error posting to channel: {e}")
