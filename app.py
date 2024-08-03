@@ -47,28 +47,11 @@ dispatcher = Dispatcher(bot, None, workers=4)  # Set workers to a positive integ
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Increase the maximum content length to 2 GB
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB
+# Set maximum content length to None for unlimited size
+app.config['MAX_CONTENT_LENGTH'] = None
 
-# Function to upload file to Google Drive
-def upload_to_drive(file_data, file_name):
-    try:
-        file_metadata = {
-            'name': file_name,
-            'parents': [GOOGLE_DRIVE_FOLDER_ID]
-        }
-        media = googleapiclient.http.MediaInMemoryUpload(file_data, resumable=True)
-        file = drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id, webViewLink'
-        ).execute()
-        file_link = file.get('webViewLink')
-        logging.info(f"Uploaded file to Google Drive: {file_name}")
-        return file_link
-    except Exception as e:
-        logging.error(f"Error uploading to Google Drive: {e}")
-        return None
+# Define states for conversation handler
+ASK_POST_CONFIRMATION, ASK_FILE_NAME, ASK_SHORTEN_CONFIRMATION = range(3)
 
 # Function to shorten URL
 def shorten_url(long_url: str) -> str:
@@ -91,30 +74,50 @@ def shorten_url(long_url: str) -> str:
         logging.error(f"Request error: {e}")
         return long_url
 
-# Define states for conversation handler
-ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
+# Function to upload file to Google Drive
+def upload_to_drive(file: object, file_name: str):
+    try:
+        file_metadata = {
+            'name': file_name,
+            'parents': [GOOGLE_DRIVE_FOLDER_ID]
+        }
+        media = requests.get(file.file_path).content
+        drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        ).execute()
+        logging.info(f"Uploaded file to Google Drive: {file_name}")
+    except Exception as e:
+        logging.error(f"Error uploading to Google Drive: {e}")
 
-# Define the handler for document uploads
+# Define handlers for commands
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text('Welcome! Please upload your file.')
+
 def handle_document(update: Update, context: CallbackContext):
     try:
         update.message.reply_text('Processing your file, please wait...')
         
         file = update.message.document.get_file()
-        file_data = file.download_as_bytearray()
+        file_url = file.file_path
         file_name = update.message.document.file_name
         
-        logging.info(f"Received file name: {file_name}")
+        logging.info(f"Received file URL: {file_url}")
 
-        file_link = upload_to_drive(file_data, file_name)
+        # Upload file to Google Drive and get the link
+        upload_to_drive(update.message.document, file_name)
+        drive_link = f"https://drive.google.com/drive/folders/{GOOGLE_DRIVE_FOLDER_ID}?id={file.file_id}"
+
+        # Send Google Drive link to user
+        update.message.reply_text(f'File uploaded successfully. Here is your Google Drive link: {drive_link}')
+
+        # Ask user if they want to shorten the link
+        update.message.reply_text('Do you want to shorten this link? (yes/no)')
         
-        if file_link:
-            update.message.reply_text(f'File uploaded successfully. Here is your Google Drive link: {file_link}\n\nDo you want to post this link to the channel? (yes/no)')
-            context.user_data['file_link'] = file_link
-            context.user_data['file_name'] = file_name
-            return ASK_POST_CONFIRMATION
-        else:
-            update.message.reply_text('An error occurred while uploading your file. Please try again later.')
-            return ConversationHandler.END
+        context.user_data['drive_link'] = drive_link
+        context.user_data['file_name'] = file_name
+        return ASK_SHORTEN_CONFIRMATION
 
     except Exception as e:
         logging.error(f"Error processing document: {e}")
@@ -132,12 +135,41 @@ def post_to_channel(file_name: str, file_opener_url: str):
         logging.error(f"Error posting to channel: {e}")
 
 # Define handlers for conversation
+def ask_shorten_confirmation(update: Update, context: CallbackContext):
+    user_response = update.message.text.lower()
+    
+    if user_response == 'yes':
+        drive_link = context.user_data.get('drive_link')
+        short_link = shorten_url(drive_link)
+        update.message.reply_text(f'Shortened link: {short_link}')
+        
+        # Ask user if they want to post the shortened link to the channel
+        update.message.reply_text('Do you want to post this link to the channel? (yes/no)')
+        context.user_data['short_link'] = short_link
+        return ASK_POST_CONFIRMATION
+
+    elif user_response == 'no':
+        drive_link = context.user_data.get('drive_link')
+        update.message.reply_text(f'Your Google Drive link: {drive_link}')
+        
+        # Ask user if they want to post the link to the channel
+        update.message.reply_text('Do you want to post this link to the channel? (yes/no)')
+        context.user_data['short_link'] = drive_link
+        return ASK_POST_CONFIRMATION
+
+    else:
+        update.message.reply_text('Please respond with "yes" or "no".')
+        return ASK_SHORTEN_CONFIRMATION
+
 def ask_post_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
     
     if user_response == 'yes':
-        update.message.reply_text('Please provide the file name:')
-        return ASK_FILE_NAME
+        file_name = context.user_data.get('file_name')
+        file_opener_url = context.user_data.get('short_link')
+        post_to_channel(file_name, file_opener_url)
+        update.message.reply_text('File posted to channel successfully.')
+        return ConversationHandler.END
     elif user_response == 'no':
         update.message.reply_text('The file was not posted.')
         return ConversationHandler.END
@@ -145,27 +177,16 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
         update.message.reply_text('Please respond with "yes" or "no".')
         return ASK_POST_CONFIRMATION
 
-def ask_file_name(update: Update, context: CallbackContext):
-    file_name = update.message.text
-    file_link = context.user_data.get('file_link')
-    encoded_url = base64.urlsafe_b64encode(file_link.encode()).decode().rstrip('=')
-    file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}&{file_name}'
-
-    post_to_channel(file_name, file_opener_url)
-    
-    update.message.reply_text('File posted to channel successfully.')
-    return ConversationHandler.END
-
 # Add handlers to dispatcher
+dispatcher.add_handler(CommandHandler('start', start))
 conversation_handler = ConversationHandler(
     entry_points=[MessageHandler(Filters.document, handle_document)],
     states={
+        ASK_SHORTEN_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_shorten_confirmation)],
         ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
-        ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
     },
     fallbacks=[],
 )
-
 dispatcher.add_handler(conversation_handler)
 
 # Webhook route
