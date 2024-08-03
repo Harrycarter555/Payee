@@ -2,7 +2,7 @@ import os
 import base64
 import requests
 from flask import Flask, request
-from telegram import Bot, Update, InputFile
+from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import logging
 
@@ -103,6 +103,11 @@ def handle_file(update: Update, context: CallbackContext):
             file_url = file.file_path
             file_id = update.message.photo[-1].file_id
             file_name = "photo.jpg"  # Default file name for photos
+        elif update.message.video:
+            file = update.message.video.get_file()  # Get the video file
+            file_url = file.file_path
+            file_id = update.message.video.file_id
+            file_name = update.message.video.file_name or "video.mp4"  # Default file name for videos
         else:
             update.message.reply_text('Unsupported file type.')
             return ConversationHandler.END
@@ -166,7 +171,7 @@ def ask_file_name(update: Update, context: CallbackContext):
 
 # Add handlers to dispatcher
 conversation_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.document | Filters.photo, handle_file)],
+    entry_points=[MessageHandler(Filters.document | Filters.photo | Filters.video, handle_file)],
     states={
         ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
         ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
