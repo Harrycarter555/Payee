@@ -6,9 +6,15 @@ from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import logging
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-from google.oauth2 import service_account
+
+# Try to import googleapiclient and handle ImportError
+try:
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+    from google.oauth2 import service_account
+except ImportError as e:
+    logging.error(f"ImportError: {e}")
+    raise
 
 app = Flask(__name__)
 
@@ -35,11 +41,14 @@ logging.basicConfig(level=logging.INFO)
 # Set a very large maximum content length
 app.config['MAX_CONTENT_LENGTH'] = None  # No limit
 
-# Initialize Google Drive API
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
-SERVICE_ACCOUNT_INFO = json.load(open(GOOGLE_SERVICE_ACCOUNT_FILE))
-credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
-drive_service = build('drive', 'v3', credentials=credentials)
+# Initialize Google Drive API if the module is available
+if 'googleapiclient' in globals():
+    SCOPES = ['https://www.googleapis.com/auth/drive.file']
+    SERVICE_ACCOUNT_INFO = json.load(open(GOOGLE_SERVICE_ACCOUNT_FILE))
+    credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
+    drive_service = build('drive', 'v3', credentials=credentials)
+else:
+    drive_service = None
 
 # Function to shorten URL
 def shorten_url(long_url: str) -> str:
@@ -62,8 +71,12 @@ def shorten_url(long_url: str) -> str:
         logging.error(f"Request error: {e}")
         return long_url
 
-# Function to upload file to Google Drive
+# Function to upload file to Google Drive if the module is available
 def upload_to_google_drive(file_path: str, file_name: str):
+    if drive_service is None:
+        logging.error("Google Drive service is not initialized.")
+        return None
+
     try:
         media = MediaFileUpload(file_path, resumable=True)
         file_metadata = {
@@ -214,21 +227,21 @@ conversation_handler = ConversationHandler(
 dispatcher.add_handler(conversation_handler)
 dispatcher.add_handler(CommandHandler('start', start))
 
-# Webhook route
+# Set webhook for Telegram
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    try:
-        update = Update.de_json(request.get_json(force=True), bot)
+    if request.method == 'POST':
+        json_str = request.get_data(as_text=True)
+        update = Update.de_json(json.loads(json_str), bot)
         dispatcher.process_update(update)
         return 'ok', 200
-    except Exception as e:
-        logging.error(f'Error processing update: {e}')
-        return 'error', 500
+    return 'Method Not Allowed', 405
 
-# Home route
-@app.route('/')
-def home():
-    return 'Hello, this is your bot.'
-
+# Define main function to run the Flask app
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
+    # Set webhook URL with Telegram
+    bot.set_webhook(url=WEBHOOK_URL)
+    logging.info(f"Webhook set to: {WEBHOOK_URL}")
+    
+    # Run the Flask app
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)), debug=True)
