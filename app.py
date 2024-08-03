@@ -42,7 +42,7 @@ drive_service = build('drive', 'v3', credentials=credentials)
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
-dispatcher = Dispatcher(bot, None, workers=4)
+dispatcher = Dispatcher(bot, None, workers=4)  # Set workers to a positive integer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -159,8 +159,11 @@ def ask_file_name(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 # Add handlers to dispatcher
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("Welcome! Please upload a file to get started.")
+
 conversation_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.document, handle_document)],
+    entry_points=[CommandHandler('start', start), MessageHandler(Filters.document, handle_document)],
     states={
         ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
         ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
@@ -174,7 +177,6 @@ dispatcher.add_handler(conversation_handler)
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        logging.info('Received webhook request')
         update = Update.de_json(request.get_json(force=True), bot)
         dispatcher.process_update(update)
         return 'ok', 200
