@@ -42,7 +42,7 @@ drive_service = build('drive', 'v3', credentials=credentials)
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
-dispatcher = Dispatcher(bot, None, workers=0)
+dispatcher = Dispatcher(bot, None, workers=4)  # Set workers to a positive integer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
