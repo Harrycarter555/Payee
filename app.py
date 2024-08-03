@@ -25,7 +25,18 @@ if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHA
 
 # Initialize Google Drive API
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
-SERVICE_ACCOUNT_INFO = json.load(requests.get(GOOGLE_SERVICE_ACCOUNT_FILE).json()) if GOOGLE_SERVICE_ACCOUNT_FILE.startswith('http') else json.load(open(GOOGLE_SERVICE_ACCOUNT_FILE))
+
+def get_google_service_account_credentials():
+    if GOOGLE_SERVICE_ACCOUNT_FILE.startswith('http'):
+        response = requests.get(GOOGLE_SERVICE_ACCOUNT_FILE)
+        response.raise_for_status()
+        service_account_info = response.json()
+    else:
+        with open(GOOGLE_SERVICE_ACCOUNT_FILE) as f:
+            service_account_info = json.load(f)
+    return service_account_info
+
+SERVICE_ACCOUNT_INFO = get_google_service_account_credentials()
 credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
 drive_service = build('drive', 'v3', credentials=credentials)
 
@@ -37,7 +48,7 @@ dispatcher = Dispatcher(bot, None, workers=0)
 logging.basicConfig(level=logging.INFO)
 
 # Increase the maximum content length to 2 GB
-app.config['MAX_CONTENT_LENGTH'] = none
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB
 
 # Function to shorten URL
 def shorten_url(long_url: str) -> str:
