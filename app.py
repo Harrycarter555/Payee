@@ -5,7 +5,7 @@ import json
 import logging
 from flask import Flask, request
 from telegram import Bot, Update
-from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters, ConversationHandler
+from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 
@@ -40,9 +40,9 @@ SERVICE_ACCOUNT_INFO = get_google_service_account_credentials()
 credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
 drive_service = build('drive', 'v3', credentials=credentials)
 
-# Initialize Telegram bot and application
+# Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
-application = Application.builder().token(TELEGRAM_TOKEN).build()
+dispatcher = Dispatcher(bot, None, workers=4)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -59,7 +59,7 @@ def shorten_url(long_url: str) -> str:
     try:
         response = requests.get(api_url)
         response.raise_for_status()  # Raise an exception for HTTP errors
-
+        
         response_data = response.json()
         if response_data.get("status") == "success":
             short_url = response_data.get("shortenedUrl", "")
@@ -94,89 +94,88 @@ def upload_to_drive(file_url: str, file_name: str):
 ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
 
 # Define the handler for document uploads
-async def handle_document(update: Update, context: CallbackContext):
+def handle_document(update: Update, context: CallbackContext):
     try:
-        await update.message.reply_text('Processing your file, please wait...')
-
-        file = await update.message.document.get_file()
+        update.message.reply_text('Processing your file, please wait...')
+        
+        file = update.message.document.get_file()
         file_url = file.file_path
         file_name = update.message.document.file_name
-
+        
         logging.info(f"Received file URL: {file_url}")
 
         short_url = shorten_url(file_url)
-
+        
         logging.info(f"Shortened URL: {short_url}")
-
+        
         if not short_url.startswith('http'):
             raise ValueError("Shortened URL is invalid.")
-
-        await update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-
+        
+        update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        
         context.user_data['short_url'] = short_url
         context.user_data['file_name'] = file_name
         return ASK_POST_CONFIRMATION
 
     except Exception as e:
         logging.error(f"Error processing document: {e}")
-        await update.message.reply_text('An error occurred while processing your file. Please try again later.')
+        update.message.reply_text('An error occurred while processing your file. Please try again later.')
         return ConversationHandler.END
 
 # Post the shortened URL to the channel
-async def post_to_channel(file_name: str, file_opener_url: str):
+def post_to_channel(file_name: str, file_opener_url: str):
     try:
         message = (f'File Name: {file_name}\n'
                    f'Access the file using this link: {file_opener_url}')
-        await bot.send_message(chat_id=CHANNEL_ID, text=message)
+        bot.send_message(chat_id=CHANNEL_ID, text=message)
         logging.info(f"Posted to channel: {message}")
     except Exception as e:
         logging.error(f"Error posting to channel: {e}")
 
 # Define handlers for conversation
-async def ask_post_confirmation(update: Update, context: CallbackContext):
+def ask_post_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
-
+    
     if user_response == 'yes':
-        await update.message.reply_text('Please provide the file name:')
+        update.message.reply_text('Please provide the file name:')
         return ASK_FILE_NAME
     elif user_response == 'no':
-        await update.message.reply_text('The file was not posted.')
+        update.message.reply_text('The file was not posted.')
         return ConversationHandler.END
     else:
-        await update.message.reply_text('Please respond with "yes" or "no".')
+        update.message.reply_text('Please respond with "yes" or "no".')
         return ASK_POST_CONFIRMATION
 
-async def ask_file_name(update: Update, context: CallbackContext):
+def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
     encoded_url = base64.urlsafe_b64encode(short_url.encode()).decode().rstrip('=')
     file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}&&{file_name}'
 
-    await post_to_channel(file_name, file_opener_url)
+    post_to_channel(file_name, file_opener_url)
     upload_to_drive(short_url, file_name)
-
-    await update.message.reply_text('File posted to channel and uploaded to Google Drive successfully.')
+    
+    update.message.reply_text('File posted to channel and uploaded to Google Drive successfully.')
     return ConversationHandler.END
 
-# Add handlers to application
+# Add handlers to dispatcher
 conversation_handler = ConversationHandler(
-    entry_points=[MessageHandler(filters.Document.ALL, handle_document)],
+    entry_points=[MessageHandler(Filters.document, handle_document)],
     states={
-        ASK_POST_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_post_confirmation)],
-        ASK_FILE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_file_name)],
+        ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
+        ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
     },
     fallbacks=[],
 )
 
-application.add_handler(conversation_handler)
+dispatcher.add_handler(conversation_handler)
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
         update = Update.de_json(request.get_json(force=True), bot)
-        application.process_update(update)
-        logging.info(f"Update received: {update}")
+        dispatcher.process_update(update)
         return 'ok', 200
     except Exception as e:
         logging.error(f'Error processing update: {e}')
