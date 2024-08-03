@@ -363,7 +363,7 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def post_to_channel(file_opener_url: str):
     try:
         encoded_url = b64encode(file_opener_url.encode()).decode()
-        message = f"https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}"
+        message = f"https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}&&{file_name}"
         bot.send_message(chat_id=CHANNEL_ID, text=message)
         logging.info(f"Posted to channel: {message}")
     except Exception as e:
