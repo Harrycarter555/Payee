@@ -3,7 +3,8 @@ import json
 import logging
 from flask import Flask, request
 from telegram import Bot, Update
-from telegram.ext import Dispatcher, CommandHandler, CallbackContext, ConversationHandler
+from telegram.ext import Dispatcher
+from handlers import conversation_handler
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -12,9 +13,6 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=0)
-
-# Import handlers
-from handlers import conversation_handler
 
 # Add handlers to dispatcher
 dispatcher.add_handler(conversation_handler)
