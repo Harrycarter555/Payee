@@ -1,13 +1,13 @@
 import os
 import base64
-import json
 import requests
+import json
 import logging
 from flask import Flask, request
-from googleapiclient.discovery import build
-from google.oauth2 import service_account
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
 
 app = Flask(__name__)
 
@@ -23,6 +23,12 @@ GOOGLE_DRIVE_FOLDER_ID = os.getenv('GOOGLE_DRIVE_FOLDER_ID')
 if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME or not GOOGLE_SERVICE_ACCOUNT_FILE or not GOOGLE_DRIVE_FOLDER_ID:
     raise ValueError("One or more environment variables are not set.")
 
+# Initialize Google Drive API
+SCOPES = ['https://www.googleapis.com/auth/drive.file']
+SERVICE_ACCOUNT_INFO = json.load(requests.get(GOOGLE_SERVICE_ACCOUNT_FILE).json()) if GOOGLE_SERVICE_ACCOUNT_FILE.startswith('http') else json.load(open(GOOGLE_SERVICE_ACCOUNT_FILE))
+credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
+drive_service = build('drive', 'v3', credentials=credentials)
+
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=0)
@@ -31,13 +37,7 @@ dispatcher = Dispatcher(bot, None, workers=0)
 logging.basicConfig(level=logging.INFO)
 
 # Increase the maximum content length to 2 GB
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB
-
-# Initialize Google Drive API
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
-SERVICE_ACCOUNT_INFO = json.load(open(GOOGLE_SERVICE_ACCOUNT_FILE))
-credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
-drive_service = build('drive', 'v3', credentials=credentials)
+app.config['MAX_CONTENT_LENGTH'] = none
 
 # Function to shorten URL
 def shorten_url(long_url: str) -> str:
@@ -61,25 +61,23 @@ def shorten_url(long_url: str) -> str:
         return long_url
 
 # Function to upload file to Google Drive
-def upload_to_drive(file_url: str, file_name: str) -> str:
+def upload_to_drive(file_url: str, file_name: str):
     try:
-        response = requests.get(file_url)
-        response.raise_for_status()
-        file_data = response.content
-        
+        file_id = file_url.split('/')[-2]  # Extract file ID from URL
+        request = drive_service.files().get(fileId=file_id, fields='id, name').execute()
         file_metadata = {
             'name': file_name,
             'parents': [GOOGLE_DRIVE_FOLDER_ID]
         }
-        media = MediaIoBaseUpload(io.BytesIO(file_data), mimetype='application/octet-stream')
-        file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-        
-        file_id = file.get('id')
-        logging.info(f"Uploaded file ID: {file_id}")
-        return f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
+        media = requests.get(file_url).content
+        drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        ).execute()
+        logging.info(f"Uploaded file to Google Drive: {file_name}")
     except Exception as e:
-        logging.error(f"Error uploading file to Google Drive: {e}")
-        return None
+        logging.error(f"Error uploading to Google Drive: {e}")
 
 # Define states for conversation handler
 ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
@@ -95,23 +93,18 @@ def handle_document(update: Update, context: CallbackContext):
         
         logging.info(f"Received file URL: {file_url}")
 
-        drive_link = upload_to_drive(file_url, file_name)
+        short_url = shorten_url(file_url)
         
-        if drive_link:
-            short_url = shorten_url(drive_link)
-            logging.info(f"Shortened URL: {short_url}")
-            
-            if not short_url.startswith('http'):
-                raise ValueError("Shortened URL is invalid.")
-            
-            update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-            
-            context.user_data['short_url'] = short_url
-            context.user_data['file_name'] = file_name
-            return ASK_POST_CONFIRMATION
-        else:
-            update.message.reply_text('Failed to upload the file to Google Drive. Please try again later.')
-            return ConversationHandler.END
+        logging.info(f"Shortened URL: {short_url}")
+        
+        if not short_url.startswith('http'):
+            raise ValueError("Shortened URL is invalid.")
+        
+        update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        
+        context.user_data['short_url'] = short_url
+        context.user_data['file_name'] = file_name
+        return ASK_POST_CONFIRMATION
 
     except Exception as e:
         logging.error(f"Error processing document: {e}")
@@ -149,8 +142,9 @@ def ask_file_name(update: Update, context: CallbackContext):
     file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}&&{file_name}'
 
     post_to_channel(file_name, file_opener_url)
+    upload_to_drive(short_url, file_name)
     
-    update.message.reply_text('File posted to channel successfully.')
+    update.message.reply_text('File posted to channel and uploaded to Google Drive successfully.')
     return ConversationHandler.END
 
 # Add handlers to dispatcher
