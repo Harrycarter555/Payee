@@ -135,14 +135,17 @@ def handle_file(update: Update, context: CallbackContext):
         # Determine the type of file (document or photo)
         if update.message.document:
             file = update.message.document.get_file()
+            logging.info(f"Received document: {update.message.document.file_name}")
             file_path = file.download_as_bytearray()
             file_name = update.message.document.file_name
         elif update.message.photo:
             file = update.message.photo[-1].get_file()  # Get the highest resolution photo
+            logging.info("Received photo")
             file_path = file.download_as_bytearray()
             file_name = "photo.jpg"  # Default file name for photos
         elif update.message.video:
             file = update.message.video.get_file()  # Get the video file
+            logging.info(f"Received video: {update.message.video.file_name}")
             file_path = file.download_as_bytearray()
             file_name = update.message.video.file_name or "video.mp4"  # Default file name for videos
         else:
@@ -153,26 +156,28 @@ def handle_file(update: Update, context: CallbackContext):
         file_path_name = f'/tmp/{file_name}'
         with open(file_path_name, 'wb') as f:
             f.write(file_path)
+        logging.info(f"Saved file to {file_path_name}")
         
         # Upload to Google Drive
         google_drive_link = upload_to_google_drive(file_path_name, file_name)
-        os.remove(file_path_name)  # Clean up local file
-        
-        if google_drive_link:
-            short_url = shorten_url(google_drive_link)
-            logging.info(f"Shortened URL: {short_url}")
-
-            # Send the download link immediately
-            update.message.reply_text(f'File uploaded successfully. Here is your download link: {google_drive_link}\n'
-                                     f'Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-            
-            # Save data for further processing
-            context.user_data['short_url'] = short_url
-            context.user_data['file_name'] = file_name
-            return ASK_POST_CONFIRMATION
-        else:
+        if not google_drive_link:
+            logging.error("Failed to upload file to Google Drive")
             update.message.reply_text('Error processing the file.')
             return ConversationHandler.END
+
+        os.remove(file_path_name)  # Clean up local file
+        
+        short_url = shorten_url(google_drive_link)
+        logging.info(f"Shortened URL: {short_url}")
+
+        # Send the download link immediately
+        update.message.reply_text(f'File uploaded successfully. Here is your download link: {google_drive_link}\n'
+                                 f'Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        
+        # Save data for further processing
+        context.user_data['short_url'] = short_url
+        context.user_data['file_name'] = file_name
+        return ASK_POST_CONFIRMATION
 
     except Exception as e:
         logging.error(f"Error processing file: {e}")
@@ -214,9 +219,7 @@ def ask_file_name(update: Update, context: CallbackContext):
     update.message.reply_text('File posted to channel successfully.')
     return ConversationHandler.END
 
-# Add handlers to dispatcher
-conversation_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.document | Filters.photo | Filters.video, handle_file)],
+entry_points=[MessageHandler(Filters.document | Filters.photo | Filters.video, handle_file)],
     states={
         ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
         ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
