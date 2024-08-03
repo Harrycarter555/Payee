@@ -2,7 +2,7 @@ import os
 import base64
 import requests
 from flask import Flask, request
-from telegram import Bot, Update
+from telegram import Bot, Update, InputFile
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import logging
 
@@ -15,6 +15,7 @@ URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
 
+# Validate environment variables
 if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME:
     raise ValueError("One or more environment variables are not set.")
 
@@ -93,8 +94,12 @@ def handle_document(update: Update, context: CallbackContext):
         
         file = update.message.document.get_file()
         file_url = file.file_path
+        file_id = update.message.document.file_id
+        file_name = update.message.document.file_name
         
         logging.info(f"Received file URL: {file_url}")
+        logging.info(f"File ID: {file_id}")
+        logging.info(f"File Name: {file_name}")
 
         short_url = shorten_url(file_url)
         
@@ -106,6 +111,7 @@ def handle_document(update: Update, context: CallbackContext):
         update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
         
         context.user_data['short_url'] = short_url
+        context.user_data['file_name'] = file_name
         return ASK_POST_CONFIRMATION
 
     except Exception as e:
