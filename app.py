@@ -1,10 +1,14 @@
 import os
 import base64
 import requests
+import json
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import logging
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.oauth2 import service_account
 
 app = Flask(__name__)
 
@@ -14,6 +18,8 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
+GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
+GOOGLE_DRIVE_FOLDER_ID = os.getenv('GOOGLE_DRIVE_FOLDER_ID')
 
 # Validate environment variables
 if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME:
@@ -26,8 +32,14 @@ dispatcher = Dispatcher(bot, None, workers=0)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Increase the maximum content length to 2 GB
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB
+# Set a very large maximum content length
+app.config['MAX_CONTENT_LENGTH'] = None  # No limit
+
+# Initialize Google Drive API
+SCOPES = ['https://www.googleapis.com/auth/drive.file']
+SERVICE_ACCOUNT_INFO = json.load(open(GOOGLE_SERVICE_ACCOUNT_FILE))
+credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
+drive_service = build('drive', 'v3', credentials=credentials)
 
 # Function to shorten URL
 def shorten_url(long_url: str) -> str:
@@ -49,6 +61,21 @@ def shorten_url(long_url: str) -> str:
     except requests.RequestException as e:
         logging.error(f"Request error: {e}")
         return long_url
+
+# Function to upload file to Google Drive
+def upload_to_google_drive(file_path: str, file_name: str):
+    try:
+        media = MediaFileUpload(file_path, resumable=True)
+        file_metadata = {
+            'name': file_name,
+            'parents': [GOOGLE_DRIVE_FOLDER_ID]
+        }
+        file = drive_service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+        logging.info(f"Uploaded to Google Drive: {file['webViewLink']}")
+        return file['webViewLink']
+    except Exception as e:
+        logging.error(f"Error uploading to Google Drive: {e}")
+        return None
 
 # Define states for conversation handler
 ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
@@ -95,39 +122,44 @@ def handle_file(update: Update, context: CallbackContext):
         # Determine the type of file (document or photo)
         if update.message.document:
             file = update.message.document.get_file()
-            file_url = file.file_path
-            file_id = update.message.document.file_id
+            file_path = file.download_as_bytearray()
             file_name = update.message.document.file_name
         elif update.message.photo:
             file = update.message.photo[-1].get_file()  # Get the highest resolution photo
-            file_url = file.file_path
-            file_id = update.message.photo[-1].file_id
+            file_path = file.download_as_bytearray()
             file_name = "photo.jpg"  # Default file name for photos
         elif update.message.video:
             file = update.message.video.get_file()  # Get the video file
-            file_url = file.file_path
-            file_id = update.message.video.file_id
+            file_path = file.download_as_bytearray()
             file_name = update.message.video.file_name or "video.mp4"  # Default file name for videos
         else:
             update.message.reply_text('Unsupported file type.')
             return ConversationHandler.END
         
-        logging.info(f"Received file URL: {file_url}")
-        logging.info(f"File ID: {file_id}")
-        logging.info(f"File Name: {file_name}")
+        # Save the file temporarily
+        file_path_name = f'/tmp/{file_name}'
+        with open(file_path_name, 'wb') as f:
+            f.write(file_path)
+        
+        # Upload to Google Drive
+        google_drive_link = upload_to_google_drive(file_path_name, file_name)
+        os.remove(file_path_name)  # Clean up local file
+        
+        if google_drive_link:
+            short_url = shorten_url(google_drive_link)
+            logging.info(f"Shortened URL: {short_url}")
 
-        short_url = shorten_url(file_url)
-        
-        logging.info(f"Shortened URL: {short_url}")
-        
-        if not short_url.startswith('http'):
-            raise ValueError("Shortened URL is invalid.")
-        
-        update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-        
-        context.user_data['short_url'] = short_url
-        context.user_data['file_name'] = file_name
-        return ASK_POST_CONFIRMATION
+            # Send the download link immediately
+            update.message.reply_text(f'File uploaded successfully. Here is your download link: {google_drive_link}\n'
+                                     f'Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+            
+            # Save data for further processing
+            context.user_data['short_url'] = short_url
+            context.user_data['file_name'] = file_name
+            return ASK_POST_CONFIRMATION
+        else:
+            update.message.reply_text('Error processing the file.')
+            return ConversationHandler.END
 
     except Exception as e:
         logging.error(f"Error processing file: {e}")
@@ -196,19 +228,4 @@ def webhook():
 # Home route
 @app.route('/')
 def home():
-    return 'Hello, World!'
-
-# Webhook setup route
-@app.route('/setwebhook', methods=['GET', 'POST'])
-def setup_webhook():
-    response = requests.post(
-        f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-        data={'url': WEBHOOK_URL}
-    )
-    if response.json().get('ok'):
-        return "Webhook setup ok"
-    else:
-        return "Webhook setup failed"
-
-if __name__ == '__main__':
-    app.run(port=5000)
+    return '
