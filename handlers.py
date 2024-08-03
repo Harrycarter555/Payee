@@ -155,3 +155,34 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
     elif user_response == 'no':
         update.message.reply_text('The file was not posted.')
         return Conversation
+
+def ask_file_name(update: Update, context: CallbackContext):
+    try:
+        user_response = update.message.text
+        short_url = context.user_data.get('short_url')
+        file_name = context.user_data.get('file_name')
+
+        if not short_url:
+            update.message.reply_text('No file to post. Please start over.')
+            return ConversationHandler.END
+        
+        # Prepare the file opener bot URL
+        file_opener_url = f"https://t.me/{FILE_OPENER_BOT_USERNAME}?start={base64.urlsafe_b64encode(short_url.encode()).decode().strip('=')}"
+        post_to_channel(file_name, file_opener_url)
+        update.message.reply_text('File posted to the channel successfully.')
+
+        return ConversationHandler.END
+    except Exception as e:
+        logging.error(f"Error handling file name input: {e}")
+        update.message.reply_text('An error occurred. Please try again later.')
+        return ConversationHandler.END
+
+# Define the conversation handler
+conversation_handler = ConversationHandler(
+    entry_points=[CommandHandler('start', start)],
+    states={
+        ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
+        ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
+    },
+    fallbacks=[],
+)
