@@ -3,10 +3,9 @@ import json
 import base64
 import logging
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
 from google.oauth2 import service_account
 from telegram import Update
-from telegram.ext import CallbackContext, CommandHandler, MessageHandler, Filters, ConversationHandler
+from telegram.ext import CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
 
 # Initialize Google Drive API
 drive_service = None
@@ -15,8 +14,6 @@ try:
     SERVICE_ACCOUNT_INFO = json.load(open(os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')))
     credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
     drive_service = build('drive', 'v3', credentials=credentials)
-except ImportError as e:
-    logging.error(f"ImportError: {e}")
 except Exception as e:
     logging.error(f"Error initializing Google Drive API: {e}")
 
