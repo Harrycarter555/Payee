@@ -87,15 +87,25 @@ def start(update: Update, context: CallbackContext):
         logging.error(f"Error handling /start command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
 
-# Define the handler for document uploads
-def handle_document(update: Update, context: CallbackContext):
+# Define the handler for file uploads (including images and documents)
+def handle_file(update: Update, context: CallbackContext):
     try:
         update.message.reply_text('Processing your file, please wait...')
         
-        file = update.message.document.get_file()
-        file_url = file.file_path
-        file_id = update.message.document.file_id
-        file_name = update.message.document.file_name
+        # Determine the type of file (document or photo)
+        if update.message.document:
+            file = update.message.document.get_file()
+            file_url = file.file_path
+            file_id = update.message.document.file_id
+            file_name = update.message.document.file_name
+        elif update.message.photo:
+            file = update.message.photo[-1].get_file()  # Get the highest resolution photo
+            file_url = file.file_path
+            file_id = update.message.photo[-1].file_id
+            file_name = "photo.jpg"  # Default file name for photos
+        else:
+            update.message.reply_text('Unsupported file type.')
+            return ConversationHandler.END
         
         logging.info(f"Received file URL: {file_url}")
         logging.info(f"File ID: {file_id}")
@@ -115,7 +125,7 @@ def handle_document(update: Update, context: CallbackContext):
         return ASK_POST_CONFIRMATION
 
     except Exception as e:
-        logging.error(f"Error processing document: {e}")
+        logging.error(f"Error processing file: {e}")
         update.message.reply_text('An error occurred while processing your file. Please try again later.')
         return ConversationHandler.END
 
@@ -156,7 +166,7 @@ def ask_file_name(update: Update, context: CallbackContext):
 
 # Add handlers to dispatcher
 conversation_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.document, handle_document)],
+    entry_points=[MessageHandler(Filters.document | Filters.photo, handle_file)],
     states={
         ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
         ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
