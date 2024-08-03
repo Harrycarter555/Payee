@@ -174,6 +174,7 @@ dispatcher.add_handler(conversation_handler)
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
+        logging.info('Received webhook request')
         update = Update.de_json(request.get_json(force=True), bot)
         dispatcher.process_update(update)
         return 'ok', 200
