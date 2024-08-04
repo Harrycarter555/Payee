@@ -57,6 +57,8 @@ def handle_document(update: Update, context: CallbackContext):
 def ask_shorten_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
     
+    logging.info(f"User response for shorten confirmation: {user_response}")
+
     if user_response == 'yes':
         file_url = context.user_data.get('file_url')
         short_link = shorten_url(file_url)
@@ -83,6 +85,8 @@ def ask_shorten_confirmation(update: Update, context: CallbackContext):
 def ask_post_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
     
+    logging.info(f"User response for post confirmation: {user_response}")
+
     if user_response == 'yes':
         file_opener_url = context.user_data.get('short_link')
         post_to_channel(file_opener_url)
