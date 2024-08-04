@@ -3,7 +3,7 @@ import logging
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler
-from handlers import start, handle_document, conversation_handler
+from handlers import start, handle_document, ask_shorten_confirmation, ask_post_confirmation, conversation_handler
 
 app = Flask(__name__)
 
