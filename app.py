@@ -29,7 +29,7 @@ logging.basicConfig(level=logging.DEBUG)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB
 
 # Define states for conversation handler
-ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(2)
+ASK_FILE_NAME, ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(3)
 
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
@@ -81,19 +81,38 @@ def handle_document(update: Update, context: CallbackContext):
         
         logging.info(f"Received file URL: {file_url}")
 
-        # Provide download link
-        file_link = file_url
-        context.user_data['file_link'] = file_link
-        context.user_data['file_name'] = file_name
+        # Download file content
+        response = requests.get(file_url)
         
-        update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
-        update.message.reply_text('Do you want to shorten this link? (yes/no)')
-        return ASK_SHORTEN_CONFIRMATION
+        if response.status_code == 200:
+            # Save the file locally
+            file_path = f"/path/to/save/{file_name}"
+            with open(file_path, "wb") as f:
+                f.write(response.content)
+            
+            # Provide download link or path
+            file_link = file_url  # This is the direct URL to the file
+            context.user_data['file_link'] = file_link
+            context.user_data['file_name'] = file_name
+            
+            update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
+            update.message.reply_text('Do you want to shorten this link? (yes/no)')
+            return ASK_SHORTEN_CONFIRMATION
+        else:
+            update.message.reply_text('Failed to download the file. Please try again later.')
+            return ConversationHandler.END
 
     except Exception as e:
         logging.error(f"Error processing document: {e}")
         update.message.reply_text('An error occurred while processing your file. Please try again later.')
         return ConversationHandler.END
+
+def ask_file_name(update: Update, context: CallbackContext):
+    file_name = update.message.text
+    context.user_data['file_name'] = file_name
+    
+    update.message.reply_text(f'You provided the file name as: {file_name}\nDo you want to shorten this link? (yes/no)')
+    return ASK_SHORTEN_CONFIRMATION
 
 def ask_shorten_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
@@ -144,6 +163,7 @@ conversation_handler = ConversationHandler(
         MessageHandler(Filters.document, handle_document)
     ],
     states={
+        ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
         ASK_SHORTEN_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_shorten_confirmation)],
         ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
     },
