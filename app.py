@@ -1,13 +1,13 @@
 import os
 import requests
-import logging
 import json
+import logging
 from flask import Flask, request
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler
-from handlers import start, handle_document, conversation_handler  # Ensure these are imported correctly
+from handlers import start, handle_document, conversation_handler
 
 app = Flask(__name__)
 
