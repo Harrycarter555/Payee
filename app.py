@@ -182,13 +182,15 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     logging.info('Webhook received')
-    json_data = request.get_json()
     
-    if json_data is None:
-        logging.error('Invalid JSON format')
-        return 'error', 400
-
     try:
+        json_data = request.get_json()
+        
+        if json_data is None:
+            logging.error('Invalid JSON format')
+            return 'error', 400
+
+        # Create an Update object from the JSON data
         update = Update.de_json(json_data, bot)
         dispatcher.process_update(update)
         return 'ok'
