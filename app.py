@@ -1,4 +1,5 @@
 import os
+import base64
 import requests
 import logging
 from flask import Flask, request
@@ -25,6 +26,9 @@ dispatcher = Dispatcher(bot, None, workers=4)
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
+# Set maximum content length to 2GB
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB
+
 # Define states for conversation handler
 ASK_FILE_NAME, ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(3)
 
@@ -50,15 +54,16 @@ def shorten_url(long_url: str) -> str:
 
 def post_to_channel(file_opener_url: str, file_name: str):
     try:
+        # Format the message to include direct file name and short link
         message = (
             f"📁 *File Name:* {file_name}\n"
-            f"🔗 *Link:* https://t.me/{FILE_OPENER_BOT_USERNAME}?start={file_opener_url}"
+            f"🔗 *Link:* {file_opener_url}"
         )
         
         bot.send_message(
             chat_id=CHANNEL_ID,
             text=message,
-            parse_mode='Markdown'
+            parse_mode='Markdown'  # Use Markdown for better formatting options
         )
         logging.info(f"Posted to channel: {message}")
     except Exception as e:
@@ -77,19 +82,25 @@ def handle_document(update: Update, context: CallbackContext):
         
         logging.info(f"Received file URL: {file_url}")
 
-        # For now, assuming the file URL itself will be used
-        file_link = file_url  # Update this line if you have a specific method to get the file link
+        # Download file content
+        response = requests.get(file_url)
         
-        if file_link:
+        if response.status_code == 200:
+            # Save the file locally
+            file_path = f"/path/to/save/{file_name}"
+            with open(file_path, "wb") as f:
+                f.write(response.content)
+            
+            # Provide download link
+            file_link = file_url
             context.user_data['file_link'] = file_link
             context.user_data['file_name'] = file_name
+            
             update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
-
-            # Ask user for the file name
             update.message.reply_text('Please provide the file name for confirmation:')
             return ASK_FILE_NAME
         else:
-            update.message.reply_text('An error occurred while processing your file. Please try again later.')
+            update.message.reply_text('Failed to download the file. Please try again later.')
             return ConversationHandler.END
 
     except Exception as e:
