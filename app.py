@@ -1,20 +1,19 @@
 import os
-import requests
 import logging
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler
+from handlers import start, handle_document, conversation_handler
 
 app = Flask(__name__)
 
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
-URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
 
-if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME:
+if not TELEGRAM_TOKEN or not WEBHOOK_URL or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME:
     raise ValueError("One or more environment variables are not set.")
 
 # Initialize Telegram bot
@@ -24,8 +23,8 @@ dispatcher = Dispatcher(bot, None, workers=4)
 # Configure logging to DEBUG
 logging.basicConfig(level=logging.DEBUG)
 
-# Import handlers
-from handlers import start, handle_document, conversation_handler
+# Set maximum content length to None for unlimited size
+app.config['MAX_CONTENT_LENGTH'] = None
 
 # Add handlers to dispatcher
 dispatcher.add_handler(CommandHandler('start', start))
