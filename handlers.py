@@ -1,5 +1,4 @@
 import logging
-import requests
 from telegram import Update
 from telegram.ext import CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
 
@@ -8,12 +7,12 @@ ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(2)
 
 def upload_to_telegram(file_id: str, file_name: str):
     try:
-        # Send the file to the user
+        # Provide the file URL
         file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_id}"
         logging.info(f"File URL: {file_url}")
         return file_url
     except Exception as e:
-        logging.error(f"Error sending file: {e}")
+        logging.error(f"Error getting file URL: {e}")
         return None
 
 def start(update: Update, context: CallbackContext):
@@ -84,8 +83,8 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
     logging.info(f"User response for post confirmation: {user_response}")
 
     if user_response == 'yes':
-        file_opener_url = context.user_data.get('short_link')
-        post_to_channel(file_opener_url)
+        short_link = context.user_data.get('short_link')
+        post_to_channel(short_link)
         update.message.reply_text('File posted to channel successfully.')
         return ConversationHandler.END
     elif user_response == 'no':
