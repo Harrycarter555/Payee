@@ -1,5 +1,4 @@
 import os
-import base64
 import requests
 import logging
 from flask import Flask, request
@@ -87,7 +86,7 @@ def handle_document(update: Update, context: CallbackContext):
         
         if response.status_code == 200:
             # Save the file locally
-            file_path = f"/path/to/save/{file_name}"
+            file_path = f"/path/to/save/{file_name}"  # Adjust path as needed
             with open(file_path, "wb") as f:
                 f.write(response.content)
             
