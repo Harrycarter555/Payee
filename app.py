@@ -172,6 +172,10 @@ conversation_handler = ConversationHandler(
 # Add handlers to dispatcher
 dispatcher.add_handler(conversation_handler)
 
+@app.route('/')
+def home():
+    return 'Hello, World!'
+
 @app.route(f'/{TELEGRAM_TOKEN}', methods=['POST'])
 def webhook():
     json_str = request.get_data(as_text=True)
@@ -180,4 +184,4 @@ def webhook():
     return 'ok'
 
 if __name__ == '__main__':
-    app.run(port=int(os.environ.get('PORT', 5000)))
+    app.run(debug=True, port=int(os.environ.get('PORT', 5000)))
