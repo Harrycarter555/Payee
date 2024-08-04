@@ -81,38 +81,19 @@ def handle_document(update: Update, context: CallbackContext):
         
         logging.info(f"Received file URL: {file_url}")
 
-        # Download file content
-        response = requests.get(file_url)
+        # Provide download link
+        file_link = file_url
+        context.user_data['file_link'] = file_link
+        context.user_data['file_name'] = file_name
         
-        if response.status_code == 200:
-            # Save the file locally
-            file_path = f"/path/to/save/{file_name}"  # Adjust path as needed
-            with open(file_path, "wb") as f:
-                f.write(response.content)
-            
-            # Provide download link
-            file_link = file_url
-            context.user_data['file_link'] = file_link
-            context.user_data['file_name'] = file_name
-            
-            update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
-            update.message.reply_text('Please provide the file name for confirmation:')
-            return ASK_FILE_NAME
-        else:
-            update.message.reply_text('Failed to download the file. Please try again later.')
-            return ConversationHandler.END
+        update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
+        update.message.reply_text('Do you want to shorten this link? (yes/no)')
+        return ASK_SHORTEN_CONFIRMATION
 
     except Exception as e:
         logging.error(f"Error processing document: {e}")
         update.message.reply_text('An error occurred while processing your file. Please try again later.')
         return ConversationHandler.END
-
-def ask_file_name(update: Update, context: CallbackContext):
-    file_name = update.message.text
-    context.user_data['file_name'] = file_name
-    
-    update.message.reply_text(f'You provided the file name as: {file_name}\nDo you want to shorten this link? (yes/no)')
-    return ASK_SHORTEN_CONFIRMATION
 
 def ask_shorten_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
@@ -163,7 +144,6 @@ conversation_handler = ConversationHandler(
         MessageHandler(Filters.document, handle_document)
     ],
     states={
-        ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
         ASK_SHORTEN_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_shorten_confirmation)],
         ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
     },
