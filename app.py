@@ -1,4 +1,5 @@
 import os
+import base64
 import requests
 import logging
 from flask import Flask, request
@@ -14,9 +15,8 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
-GOOGLE_DRIVE_API_KEY = os.getenv('GOOGLE_DRIVE_API_KEY')
 
-if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME or not GOOGLE_DRIVE_API_KEY:
+if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME:
     raise ValueError("One or more environment variables are not set.")
 
 # Initialize Telegram bot
@@ -26,44 +26,13 @@ dispatcher = Dispatcher(bot, None, workers=4)
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# Set maximum content length to None for unlimited size
-app.config['MAX_CONTENT_LENGTH'] = None
-
 # Define states for conversation handler
 ASK_FILE_NAME, ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(3)
-
-def upload_to_google_drive(file_path: str) -> str:
-    # Function to upload file to Google Drive and return the shareable link
-    headers = {"Authorization": f"Bearer {GOOGLE_DRIVE_API_KEY}"}
-    
-    metadata = {
-        'name': os.path.basename(file_path),
-        'mimeType': 'application/octet-stream'
-    }
-    
-    # Create a file on Google Drive
-    response = requests.post('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', headers=headers, json=metadata)
-    response.raise_for_status()
-    
-    upload_url = response.headers['Location']
-    
-    # Upload the file in chunks
-    with open(file_path, 'rb') as file:
-        response = requests.put(upload_url, headers=headers, data=file)
-        response.raise_for_status()
-    
-    # Get the file ID
-    file_id = response.json().get('id')
-    
-    # Create a shareable link
-    shareable_link = f"https://drive.google.com/uc?id={file_id}"
-    
-    return shareable_link
 
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
     encoded_url = requests.utils.quote(long_url)
-    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}&&{file_name}"
+    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
 
     try:
         response = requests.get(api_url)
@@ -71,7 +40,10 @@ def shorten_url(long_url: str) -> str:
         
         response_data = response.json()
         if response_data.get("status") == "success":
-            return response_data.get("shortenedUrl", long_url)
+            short_url = response_data.get("shortenedUrl", "")
+            if short_url:
+                encoded_short_url = base64.b64encode(short_url.encode()).decode()
+                return encoded_short_url
         logging.error("Unexpected response format or status")
         return long_url
     except requests.RequestException as e:
@@ -80,10 +52,12 @@ def shorten_url(long_url: str) -> str:
 
 def post_to_channel(file_opener_url: str, file_name: str):
     try:
+        decoded_url = base64.b64decode(file_opener_url).decode()
+        
         # Format the message to include direct file name and short link
         message = (
             f"📁 *File Name:* {file_name}\n"
-            f"🔗 *Link:* {file_opener_url}"
+            f"🔗 *Link:* https://t.me/{FILE_OPENER_BOT_USERNAME}?start={file_opener_url}&&{file_name}"
         )
         
         bot.send_message(
@@ -108,16 +82,8 @@ def handle_document(update: Update, context: CallbackContext):
         
         logging.info(f"Received file URL: {file_url}")
 
-        # Download the file content in chunks to handle large files
-        file_path = os.path.join('/tmp', file_name)
-        with requests.get(file_url, stream=True) as response:
-            response.raise_for_status()
-            with open(file_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-        # Upload the file to Google Drive
-        file_link = upload_to_google_drive(file_path)
+        # Generate a direct download link
+        file_link = file_url  # Since Telegram does not provide an actual URL, this will be the file's unique Telegram ID
         
         if file_link:
             context.user_data['file_link'] = file_link
