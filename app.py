@@ -14,8 +14,9 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
+GOOGLE_DRIVE_API_KEY = os.getenv('GOOGLE_DRIVE_API_KEY')
 
-if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME:
+if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME or not GOOGLE_DRIVE_API_KEY:
     raise ValueError("One or more environment variables are not set.")
 
 # Initialize Telegram bot
@@ -31,10 +32,38 @@ app.config['MAX_CONTENT_LENGTH'] = None
 # Define states for conversation handler
 ASK_FILE_NAME, ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(3)
 
+def upload_to_google_drive(file_path: str) -> str:
+    # Function to upload file to Google Drive and return the shareable link
+    headers = {"Authorization": f"Bearer {GOOGLE_DRIVE_API_KEY}"}
+    
+    metadata = {
+        'name': os.path.basename(file_path),
+        'mimeType': 'application/octet-stream'
+    }
+    
+    # Create a file on Google Drive
+    response = requests.post('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', headers=headers, json=metadata)
+    response.raise_for_status()
+    
+    upload_url = response.headers['Location']
+    
+    # Upload the file in chunks
+    with open(file_path, 'rb') as file:
+        response = requests.put(upload_url, headers=headers, data=file)
+        response.raise_for_status()
+    
+    # Get the file ID
+    file_id = response.json().get('id')
+    
+    # Create a shareable link
+    shareable_link = f"https://drive.google.com/uc?id={file_id}"
+    
+    return shareable_link
+
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
     encoded_url = requests.utils.quote(long_url)
-    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
+    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}&&{file_name}"
 
     try:
         response = requests.get(api_url)
@@ -79,32 +108,27 @@ def handle_document(update: Update, context: CallbackContext):
         
         logging.info(f"Received file URL: {file_url}")
 
-        # Download the file content
-        response = requests.get(file_url, stream=True)
-        if response.status_code == 200:
-            file_path = os.path.join('/tmp', file_name)  # Save to a temporary directory
+        # Download the file content in chunks to handle large files
+        file_path = os.path.join('/tmp', file_name)
+        with requests.get(file_url, stream=True) as response:
+            response.raise_for_status()
             with open(file_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            
-            logging.info(f"File saved to {file_path}")
 
-            file_link = file_url
-            
-            if file_link:
-                context.user_data['file_link'] = file_link
-                context.user_data['file_name'] = file_name
-                update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
-                
-                # Ask user for the file name
-                update.message.reply_text('Please provide the file name for confirmation:')
-                return ASK_FILE_NAME
-            else:
-                update.message.reply_text('An error occurred while processing your file. Please try again later.')
-                return ConversationHandler.END
+        # Upload the file to Google Drive
+        file_link = upload_to_google_drive(file_path)
+        
+        if file_link:
+            context.user_data['file_link'] = file_link
+            context.user_data['file_name'] = file_name
+            update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
+
+            # Ask user for the file name
+            update.message.reply_text('Please provide the file name for confirmation:')
+            return ASK_FILE_NAME
         else:
-            logging.error(f"Failed to download file. Status code: {response.status_code}")
-            update.message.reply_text(f'Failed to download file. Status code: {response.status_code}. Please try again later.')
+            update.message.reply_text('An error occurred while processing your file. Please try again later.')
             return ConversationHandler.END
 
     except Exception as e:
