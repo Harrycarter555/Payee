@@ -182,10 +182,19 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     logging.info('Webhook received')
-    json_str = request.get_data(as_text=True)
-    update = Update.de_json(json_str, bot)
-    dispatcher.process_update(update)
-    return 'ok'
+    json_data = request.get_json()
+    
+    if json_data is None:
+        logging.error('Invalid JSON format')
+        return 'error', 400
+
+    try:
+        update = Update.de_json(json_data, bot)
+        dispatcher.process_update(update)
+        return 'ok'
+    except Exception as e:
+        logging.error(f"Error processing webhook: {e}")
+        return 'error', 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 5000)))
