@@ -60,21 +60,20 @@ def shorten_url(long_url: str) -> str:
         logging.error(f"Request error: {e}")
         return long_url
 
-def post_to_channel(file_opener_url: str, file_name: str):
+def post_to_channel(file_path: str, file_name: str) -> str:
     try:
-        message = (
-            f"📁 *File Name:* {file_name}\n"
-            f"🔗 *Link:* {file_opener_url}"
-        )
+        # Send the file to the channel and get the message ID
+        message = bot.send_document(chat_id=CHANNEL_ID, document=open(file_path, 'rb'), caption=file_name)
         
-        bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=message,
-            parse_mode='Markdown'  # Use Markdown for better formatting options
-        )
-        logging.info(f"Posted to channel: {message}")
+        # Get the download link from the message
+        file_id = message.document.file_id
+        file_link = f"https://t.me/{FILE_OPENER_BOT_USERNAME}/{file_id}"
+        
+        logging.info(f"File uploaded to channel: {file_link}")
+        return file_link
     except Exception as e:
         logging.error(f"Error posting to channel: {e}")
+        return ""
 
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Welcome! Please upload your file.')
@@ -86,8 +85,9 @@ def handle_document(update: Update, context: CallbackContext):
         file = update.message.document.get_file()
         file_url = file.file_path
         file_name = update.message.document.file_name
+        file_size = update.message.document.file_size
         
-        logging.info(f"Received file URL: {file_url}")
+        logging.info(f"Received file URL: {file_url}, Size: {file_size} bytes")
 
         # Download file content
         response = requests.get(file_url)
@@ -98,12 +98,15 @@ def handle_document(update: Update, context: CallbackContext):
             with open(file_path, "wb") as f:
                 f.write(response.content)
             
-            # Provide download link
-            file_link = file_url
-            context.user_data['file_link'] = file_link
-            context.user_data['file_name'] = file_name
-            
-            update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
+            # Decide where to upload based on file size
+            if file_size <= 15 * 1024 * 1024:  # 15MB
+                update.message.reply_text(f'File processed successfully. Here is your link: {file_url}')
+            else:
+                # File is too large, upload to channel
+                file_link = post_to_channel(file_path, file_name)
+                short_link = shorten_url(file_link)
+                update.message.reply_text(f'File processed successfully. Here is your shortened link: {short_link}')
+                
             update.message.reply_text('Please provide the file name for confirmation:')
             return ASK_FILE_NAME
         else:
