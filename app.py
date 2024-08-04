@@ -1,10 +1,12 @@
 import os
 import base64
-import logging
 import requests
+import logging
+import json
 from flask import Flask, request
 from telegram import Bot, Update
-from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
+from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler
+from telegram.ext import CallbackContext
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -19,7 +21,7 @@ FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
 if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME:
     raise ValueError("One or more environment variables are not set.")
 
-# Initialize Telegram bot and dispatcher
+# Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=4)
 
@@ -45,12 +47,32 @@ def shorten_url(long_url: str) -> str:
         if response_data.get("status") == "success":
             short_url = response_data.get("shortenedUrl", "")
             if short_url:
-                return short_url
+                # Encode the shortened URL in base64
+                encoded_short_url = base64.b64encode(short_url.encode()).decode()
+                return encoded_short_url
         logging.error("Unexpected response format")
         return long_url
     except requests.RequestException as e:
         logging.error(f"Request error: {e}")
         return long_url
+
+def post_to_channel(file_opener_url: str, file_name: str):
+    try:
+        # Decode the base64-encoded URL
+        decoded_url = base64.b64decode(file_opener_url).decode()
+        
+        # Prepare the message with a thumbnail
+        message = f"File Name: {file_name}\nLink: https://t.me/{FILE_OPENER_BOT_USERNAME}?start={file_opener_url}&&file_name={file_name}"
+        
+        # Send a photo as a thumbnail
+        bot.send_photo(
+            chat_id=CHANNEL_ID,
+            photo='https://example.com/thumbnail.jpg',  # Replace with actual thumbnail URL
+            caption=message
+        )
+        logging.info(f"Posted to channel: {message}")
+    except Exception as e:
+        logging.error(f"Error posting to channel: {e}")
 
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Welcome! Please upload your file.')
@@ -69,16 +91,17 @@ def handle_document(update: Update, context: CallbackContext):
         response = requests.get(file_url)
         file_content = response.content
         
-        # Placeholder link for now
-        drive_link = "Placeholder link - file upload to Google Drive removed"
+        # Upload file to Telegram and get the link (assuming a function to get the link)
+        file_link = file_url  # Replace this with the actual link retrieval logic
         
-        if drive_link:
-            update.message.reply_text(f'File processed successfully. Here is your link: {drive_link}')
+        if file_link:
+            update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
 
             # Ask user if they want to shorten the link
             update.message.reply_text('Do you want to shorten this link? (yes/no)')
             
-            context.user_data['drive_link'] = drive_link
+            context.user_data['file_link'] = file_link
+            context.user_data['file_name'] = file_name
             return ASK_SHORTEN_CONFIRMATION
         else:
             update.message.reply_text('An error occurred while processing your file. Please try again later.')
@@ -93,8 +116,8 @@ def ask_shorten_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
     
     if user_response == 'yes':
-        drive_link = context.user_data.get('drive_link')
-        short_link = shorten_url(drive_link)
+        file_link = context.user_data.get('file_link')
+        short_link = shorten_url(file_link)
         update.message.reply_text(f'Shortened link: {short_link}')
         
         # Ask user if they want to post the shortened link to the channel
@@ -103,12 +126,12 @@ def ask_shorten_confirmation(update: Update, context: CallbackContext):
         return ASK_POST_CONFIRMATION
 
     elif user_response == 'no':
-        drive_link = context.user_data.get('drive_link')
-        update.message.reply_text(f'Your link: {drive_link}')
+        file_link = context.user_data.get('file_link')
+        update.message.reply_text(f'Your file link: {file_link}')
         
         # Ask user if they want to post the link to the channel
         update.message.reply_text('Do you want to post this link to the channel? (yes/no)')
-        context.user_data['short_link'] = drive_link
+        context.user_data['short_link'] = file_link
         return ASK_POST_CONFIRMATION
 
     else:
@@ -119,8 +142,9 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
     
     if user_response == 'yes':
-        file_opener_url = context.user_data.get('short_link')
-        post_to_channel(file_opener_url)
+        short_link = context.user_data.get('short_link')
+        file_name = context.user_data.get('file_name')
+        post_to_channel(short_link, file_name)
         update.message.reply_text('File posted to channel successfully.')
         return ConversationHandler.END
     elif user_response == 'no':
@@ -129,15 +153,6 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
     else:
         update.message.reply_text('Please respond with "yes" or "no".')
         return ASK_POST_CONFIRMATION
-
-def post_to_channel(file_opener_url: str):
-    try:
-        encoded_url = base64.b64encode(file_opener_url.encode()).decode()
-        message = f"https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}"
-        bot.send_message(chat_id=CHANNEL_ID, text=message)
-        logging.info(f"Posted to channel: {message}")
-    except Exception as e:
-        logging.error(f"Error posting to channel: {e}")
 
 # Define conversation handler
 conversation_handler = ConversationHandler(
@@ -149,6 +164,7 @@ conversation_handler = ConversationHandler(
     fallbacks=[],
 )
 
+# Add handlers to dispatcher
 dispatcher.add_handler(CommandHandler('start', start))
 dispatcher.add_handler(conversation_handler)
 
