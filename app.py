@@ -1,5 +1,4 @@
 import os
-import base64
 import requests
 import logging
 from flask import Flask, request
@@ -43,10 +42,7 @@ def shorten_url(long_url: str) -> str:
         
         response_data = response.json()
         if response_data.get("status") == "success":
-            short_url = response_data.get("shortenedUrl", "")
-            if short_url:
-                encoded_short_url = base64.b64encode(short_url.encode()).decode()
-                return encoded_short_url
+            return response_data.get("shortenedUrl", long_url)
         logging.error("Unexpected response format or status")
         return long_url
     except requests.RequestException as e:
@@ -55,12 +51,10 @@ def shorten_url(long_url: str) -> str:
 
 def post_to_channel(file_opener_url: str, file_name: str):
     try:
-        decoded_url = base64.b64decode(file_opener_url).decode()
-        
         # Format the message to include direct file name and short link
         message = (
             f"📁 *File Name:* {file_name}\n"
-            f"🔗 *Link:* https://t.me/{FILE_OPENER_BOT_USERNAME}?start={file_opener_url}&&{file_name}"
+            f"🔗 *Link:* {file_opener_url}"
         )
         
         bot.send_message(
@@ -86,13 +80,15 @@ def handle_document(update: Update, context: CallbackContext):
         logging.info(f"Received file URL: {file_url}")
 
         # Download the file content
-        response = requests.get(file_url)
-        
+        response = requests.get(file_url, stream=True)
         if response.status_code == 200:
             file_path = os.path.join('/tmp', file_name)  # Save to a temporary directory
             with open(file_path, 'wb') as f:
-                f.write(response.content)
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
             
+            logging.info(f"File saved to {file_path}")
+
             file_link = file_url
             
             if file_link:
@@ -108,7 +104,7 @@ def handle_document(update: Update, context: CallbackContext):
                 return ConversationHandler.END
         else:
             logging.error(f"Failed to download file. Status code: {response.status_code}")
-            update.message.reply_text('An error occurred while downloading your file. Please try again later.')
+            update.message.reply_text(f'Failed to download file. Status code: {response.status_code}. Please try again later.')
             return ConversationHandler.END
 
     except Exception as e:
