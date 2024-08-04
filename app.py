@@ -26,9 +26,6 @@ dispatcher = Dispatcher(bot, None, workers=4)
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# Set maximum content length to None for unlimited size
-app.config['MAX_CONTENT_LENGTH'] = None
-
 # Define states for conversation handler
 ASK_FILE_NAME, ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(3)
 
@@ -45,8 +42,7 @@ def shorten_url(long_url: str) -> str:
         if response_data.get("status") == "success":
             short_url = response_data.get("shortenedUrl", "")
             if short_url:
-                encoded_short_url = base64.b64encode(short_url.encode()).decode()
-                return encoded_short_url
+                return short_url
         logging.error("Unexpected response format or status")
         return long_url
     except requests.RequestException as e:
@@ -55,12 +51,13 @@ def shorten_url(long_url: str) -> str:
 
 def post_to_channel(file_opener_url: str, file_name: str):
     try:
-        decoded_url = base64.b64decode(file_opener_url).decode()
+        # Use the provided short link directly
+        decoded_url = file_opener_url
         
         # Format the message to include direct file name and short link
         message = (
             f"📁 *File Name:* {file_name}\n"
-            f"🔗 *Link:* https://t.me/{FILE_OPENER_BOT_USERNAME}?start={file_opener_url}&&{file_name}"
+            f"🔗 *Link:* https://t.me/{FILE_OPENER_BOT_USERNAME}?start={decoded_url}&&{file_name}"
         )
         
         bot.send_message(
@@ -85,18 +82,14 @@ def handle_document(update: Update, context: CallbackContext):
         
         logging.info(f"Received file URL: {file_url}")
 
-        # Download file content
-        response = requests.get(file_url)
-        file_content = response.content
-        
-        # For now, assuming the file URL itself will be used
-        file_link = file_url  # Update this line if you have a specific method to get the file link
+        # For large files, you need to handle downloading or accessing
+        file_link = file_url  # Direct URL to the file
         
         if file_link:
             context.user_data['file_link'] = file_link
             context.user_data['file_name'] = file_name
             update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
-
+            
             # Ask user for the file name
             update.message.reply_text('Please provide the file name for confirmation:')
             return ASK_FILE_NAME
