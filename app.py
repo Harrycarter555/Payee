@@ -1,13 +1,12 @@
 import os
-import requests
+import base64
 import logging
-import json
-from flask import Flask, request, jsonify
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
+import requests
+from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
 
+# Initialize Flask app
 app = Flask(__name__)
 
 # Load configuration from environment variables
@@ -16,30 +15,11 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
-GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
-GOOGLE_DRIVE_FOLDER_ID = os.getenv('GOOGLE_DRIVE_FOLDER_ID')
 
-if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME or not GOOGLE_SERVICE_ACCOUNT_FILE or not GOOGLE_DRIVE_FOLDER_ID:
+if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME:
     raise ValueError("One or more environment variables are not set.")
 
-# Initialize Google Drive API
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
-
-def get_google_service_account_credentials():
-    if GOOGLE_SERVICE_ACCOUNT_FILE.startswith('http'):
-        response = requests.get(GOOGLE_SERVICE_ACCOUNT_FILE)
-        response.raise_for_status()
-        service_account_info = response.json()
-    else:
-        with open(GOOGLE_SERVICE_ACCOUNT_FILE) as f:
-            service_account_info = json.load(f)
-    return service_account_info
-
-SERVICE_ACCOUNT_INFO = get_google_service_account_credentials()
-credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
-drive_service = build('drive', 'v3', credentials=credentials)
-
-# Initialize Telegram bot
+# Initialize Telegram bot and dispatcher
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=4)
 
@@ -54,7 +34,7 @@ ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(2)
 
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
-    encoded_url = requests.utils.quote(long_url)
+    encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
     api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
 
     try:
@@ -72,35 +52,11 @@ def shorten_url(long_url: str) -> str:
         logging.error(f"Request error: {e}")
         return long_url
 
-def upload_to_drive(file_content: bytes, file_name: str):
-    try:
-        file_metadata = {
-            'name': file_name,
-            'parents': [GOOGLE_DRIVE_FOLDER_ID]
-        }
-        media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype='application/octet-stream')
-        
-        file = drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id'
-        ).execute()
-        
-        file_id = file.get('id')
-        file_link = f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
-        logging.info(f"Uploaded file to Google Drive: {file_name}")
-        return file_link
-
-    except Exception as e:
-        logging.error(f"Error uploading to Google Drive: {e}")
-        return None
-
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Welcome! Please upload your file.')
 
 def handle_document(update: Update, context: CallbackContext):
     try:
-        logging.info("Processing document...")
         update.message.reply_text('Processing your file, please wait...')
         
         file = update.message.document.get_file()
@@ -113,13 +69,11 @@ def handle_document(update: Update, context: CallbackContext):
         response = requests.get(file_url)
         file_content = response.content
         
-        logging.info(f"File downloaded. Size: {len(file_content)} bytes")
-        
-        # Upload file to Google Drive and get the link
-        drive_link = upload_to_drive(file_content, file_name)
+        # Placeholder link for now
+        drive_link = "Placeholder link - file upload to Google Drive removed"
         
         if drive_link:
-            update.message.reply_text(f'File uploaded successfully. Here is your Google Drive link: {drive_link}')
+            update.message.reply_text(f'File processed successfully. Here is your link: {drive_link}')
 
             # Ask user if they want to shorten the link
             update.message.reply_text('Do you want to shorten this link? (yes/no)')
@@ -127,7 +81,7 @@ def handle_document(update: Update, context: CallbackContext):
             context.user_data['drive_link'] = drive_link
             return ASK_SHORTEN_CONFIRMATION
         else:
-            update.message.reply_text('An error occurred while uploading your file. Please try again later.')
+            update.message.reply_text('An error occurred while processing your file. Please try again later.')
             return ConversationHandler.END
 
     except Exception as e:
@@ -150,7 +104,7 @@ def ask_shorten_confirmation(update: Update, context: CallbackContext):
 
     elif user_response == 'no':
         drive_link = context.user_data.get('drive_link')
-        update.message.reply_text(f'Your Google Drive link: {drive_link}')
+        update.message.reply_text(f'Your link: {drive_link}')
         
         # Ask user if they want to post the link to the channel
         update.message.reply_text('Do you want to post this link to the channel? (yes/no)')
@@ -195,6 +149,9 @@ conversation_handler = ConversationHandler(
     fallbacks=[],
 )
 
+dispatcher.add_handler(CommandHandler('start', start))
+dispatcher.add_handler(conversation_handler)
+
 # Webhook route
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -204,7 +161,7 @@ def webhook():
         return 'ok', 200
     except Exception as e:
         logging.error(f'Error processing update: {e}')
-        return jsonify({"error": "An error occurred while processing your request."}), 500
+        return 'error', 500
 
 # Home route
 @app.route('/')
@@ -214,18 +171,14 @@ def home():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    try:
-        response = requests.post(
-            f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-            data={'url': WEBHOOK_URL}
-        )
-        if response.json().get('ok'):
-            return "Webhook setup ok"
-        else:
-            return "Webhook setup failed"
-    except Exception as e:
-        logging.error(f'Error setting up webhook: {e}')
-        return "Webhook setup failed", 500
+    response = requests.post(
+        f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
+        data={'url': WEBHOOK_URL}
+    )
+    if response.json().get('ok'):
+        return "Webhook setup ok"
+    else:
+        return "Webhook setup failed"
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
