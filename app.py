@@ -1,5 +1,6 @@
 import os
 import logging
+import requests
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler
@@ -59,4 +60,6 @@ def setup_webhook():
         return "Webhook setup failed"
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    # Vercel runs applications on port 8080
+    port = int(os.getenv('PORT', 8080))
+    app.run(host='0.0.0.0', port=port, debug=True)
