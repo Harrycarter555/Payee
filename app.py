@@ -29,7 +29,7 @@ logging.basicConfig(level=logging.DEBUG)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB
 
 # Define states for conversation handler
-ASK_FILE_NAME, ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(3)
+ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(2)
 
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
