@@ -2,11 +2,9 @@ import os
 import base64
 import requests
 import logging
-import json
 from flask import Flask, request
 from telegram import Bot, Update
-from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler
-from telegram.ext import CallbackContext
+from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -25,18 +23,18 @@ if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHA
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=4)
 
-# Configure logging to DEBUG
+# Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 # Set maximum content length to None for unlimited size
 app.config['MAX_CONTENT_LENGTH'] = None
 
 # Define states for conversation handler
-ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(2)
+ASK_FILE_NAME, ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(3)
 
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
-    encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
+    encoded_url = requests.utils.quote(long_url)
     api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
 
     try:
@@ -47,10 +45,9 @@ def shorten_url(long_url: str) -> str:
         if response_data.get("status") == "success":
             short_url = response_data.get("shortenedUrl", "")
             if short_url:
-                # Encode the shortened URL in base64
                 encoded_short_url = base64.b64encode(short_url.encode()).decode()
                 return encoded_short_url
-        logging.error("Unexpected response format")
+        logging.error("Unexpected response format or status")
         return long_url
     except requests.RequestException as e:
         logging.error(f"Request error: {e}")
@@ -58,17 +55,18 @@ def shorten_url(long_url: str) -> str:
 
 def post_to_channel(file_opener_url: str, file_name: str):
     try:
-        # Decode the base64-encoded URL
         decoded_url = base64.b64decode(file_opener_url).decode()
         
-        # Prepare the message with a thumbnail
-        message = f"File Name: {file_name}\nLink: https://t.me/{FILE_OPENER_BOT_USERNAME}?start={file_opener_url}&&file_name={file_name}"
+        # Format the message to include direct file name and short link
+        message = (
+            f"📁 *File Name:* {file_name}\n"
+            f"🔗 *Link:* https://t.me/{FILE_OPENER_BOT_USERNAME}?start={file_opener_url}&&{file_name}"
+        )
         
-        # Send a photo as a thumbnail
-        bot.send_photo(
+        bot.send_message(
             chat_id=CHANNEL_ID,
-            photo='https://example.com/thumbnail.jpg',  # Replace with actual thumbnail URL
-            caption=message
+            text=message,
+            parse_mode='Markdown'  # Use Markdown for better formatting options
         )
         logging.info(f"Posted to channel: {message}")
     except Exception as e:
@@ -91,18 +89,17 @@ def handle_document(update: Update, context: CallbackContext):
         response = requests.get(file_url)
         file_content = response.content
         
-        # Upload file to Telegram and get the link (assuming a function to get the link)
-        file_link = file_url  # Replace this with the actual link retrieval logic
+        # For now, assuming the file URL itself will be used
+        file_link = file_url  # Update this line if you have a specific method to get the file link
         
         if file_link:
-            update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
-
-            # Ask user if they want to shorten the link
-            update.message.reply_text('Do you want to shorten this link? (yes/no)')
-            
             context.user_data['file_link'] = file_link
             context.user_data['file_name'] = file_name
-            return ASK_SHORTEN_CONFIRMATION
+            update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
+
+            # Ask user for the file name
+            update.message.reply_text('Please provide the file name for confirmation:')
+            return ASK_FILE_NAME
         else:
             update.message.reply_text('An error occurred while processing your file. Please try again later.')
             return ConversationHandler.END
@@ -111,6 +108,13 @@ def handle_document(update: Update, context: CallbackContext):
         logging.error(f"Error processing document: {e}")
         update.message.reply_text('An error occurred while processing your file. Please try again later.')
         return ConversationHandler.END
+
+def ask_file_name(update: Update, context: CallbackContext):
+    file_name = update.message.text
+    context.user_data['file_name'] = file_name
+    
+    update.message.reply_text(f'You provided the file name as: {file_name}\nDo you want to shorten this link? (yes/no)')
+    return ASK_SHORTEN_CONFIRMATION
 
 def ask_shorten_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
@@ -158,6 +162,7 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 conversation_handler = ConversationHandler(
     entry_points=[MessageHandler(Filters.document, handle_document)],
     states={
+        ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
         ASK_SHORTEN_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_shorten_confirmation)],
         ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
     },
@@ -165,36 +170,14 @@ conversation_handler = ConversationHandler(
 )
 
 # Add handlers to dispatcher
-dispatcher.add_handler(CommandHandler('start', start))
 dispatcher.add_handler(conversation_handler)
 
-# Webhook route
-@app.route('/webhook', methods=['POST'])
+@app.route(f'/{TELEGRAM_TOKEN}', methods=['POST'])
 def webhook():
-    try:
-        update = Update.de_json(request.get_json(force=True), bot)
-        dispatcher.process_update(update)
-        return 'ok', 200
-    except Exception as e:
-        logging.error(f'Error processing update: {e}')
-        return 'error', 500
-
-# Home route
-@app.route('/')
-def home():
-    return 'Hello, World!'
-
-# Webhook setup route
-@app.route('/setwebhook', methods=['GET', 'POST'])
-def setup_webhook():
-    response = requests.post(
-        f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-        data={'url': WEBHOOK_URL}
-    )
-    if response.json().get('ok'):
-        return "Webhook setup ok"
-    else:
-        return "Webhook setup failed"
+    json_str = request.get_data(as_text=True)
+    update = Update.de_json(json_str, bot)
+    dispatcher.process_update(update)
+    return 'ok'
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    app.run(port=int(os.environ.get('PORT', 5000)))
