@@ -42,7 +42,7 @@ ASK_FILE_NAME, ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(3)
 
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
-    encoded_url = requests.utils.quote(long_url)
+    encoded_url = requests.utils.quote(long_url, safe='')
     api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
 
     try:
@@ -62,10 +62,9 @@ def shorten_url(long_url: str) -> str:
 
 def post_to_channel(file_path: str, file_name: str) -> str:
     try:
-        # Send the file to the channel and get the message ID
-        message = bot.send_document(chat_id=CHANNEL_ID, document=open(file_path, 'rb'), caption=file_name)
+        with open(file_path, 'rb') as file:
+            message = bot.send_document(chat_id=CHANNEL_ID, document=file, caption=file_name)
         
-        # Get the download link from the message
         file_id = message.document.file_id
         file_link = f"https://t.me/{FILE_OPENER_BOT_USERNAME}/{file_id}"
         
@@ -94,7 +93,7 @@ def handle_document(update: Update, context: CallbackContext):
         
         if response.status_code == 200:
             # Save the file locally
-            file_path = f"/tmp/{file_name}"  # Updated to /tmp directory
+            file_path = f"/tmp/{file_name}"
             with open(file_path, "wb") as f:
                 f.write(response.content)
             
@@ -170,7 +169,7 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 # Define conversation handler
 conversation_handler = ConversationHandler(
     entry_points=[
-        CommandHandler('start', start),  # Handle /start command
+        CommandHandler('start', start),
         MessageHandler(Filters.document, handle_document)
     ],
     states={
