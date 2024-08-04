@@ -4,6 +4,7 @@ import logging
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
+from telethon import TelegramClient
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -14,13 +15,18 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
+API_ID = os.getenv('API_ID')
+API_HASH = os.getenv('API_HASH')
 
-if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME:
+if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME or not API_ID or not API_HASH:
     raise ValueError("One or more environment variables are not set.")
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=4)
+
+# Initialize Telethon client for file uploads
+telethon_client = TelegramClient('session_name', API_ID, API_HASH)
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -51,18 +57,29 @@ def shorten_url(long_url: str) -> str:
         logging.error(f"Request error: {e}")
         return long_url
 
-def send_file_to_channel(file_path: str, file_name: str):
+async def upload_file_with_telethon(file_path: str, chat_id: int):
     try:
-        with open(file_path, 'rb') as file:
-            bot.send_document(
-                chat_id=CHANNEL_ID,
-                document=file,
-                caption=f"File Name: {file_name}",
-                parse_mode='Markdown'
-            )
-        logging.info(f"Sent file to channel: {file_name}")
+        await telethon_client.send_file(chat_id, file_path)
+        logging.info(f"File uploaded successfully to {chat_id}")
     except Exception as e:
-        logging.error(f"Error sending file to channel: {e}")
+        logging.error(f"Error uploading file with Telethon: {e}")
+
+def post_to_channel(file_opener_url: str, file_name: str):
+    try:
+        # Format the message to include direct file name and short link
+        message = (
+            f"📁 *File Name:* {file_name}\n"
+            f"🔗 *Link:* {file_opener_url}"
+        )
+        
+        bot.send_message(
+            chat_id=CHANNEL_ID,
+            text=message,
+            parse_mode='Markdown'  # Use Markdown for better formatting options
+        )
+        logging.info(f"Posted to channel: {message}")
+    except Exception as e:
+        logging.error(f"Error posting to channel: {e}")
 
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Welcome! Please upload your file.')
@@ -72,19 +89,17 @@ def handle_document(update: Update, context: CallbackContext):
         update.message.reply_text('Processing your file, please wait...')
         
         file = update.message.document.get_file()
-        file_id = update.message.document.file_id
+        file_url = file.file_path
         file_name = update.message.document.file_name
-        
-        # Get file information
-        file_info = bot.get_file(file_id)
-        file_url = file_info.file_path  # Retrieve the file path
         
         logging.info(f"Received file URL: {file_url}")
 
-        # Save the file locally
-        file_path = f"/path/to/save/{file_name}"
+        # Download file content
         response = requests.get(file_url)
+        
         if response.status_code == 200:
+            # Save the file locally
+            file_path = f"/path/to/save/{file_name}"
             with open(file_path, "wb") as f:
                 f.write(response.content)
             
@@ -93,12 +108,16 @@ def handle_document(update: Update, context: CallbackContext):
             context.user_data['file_link'] = file_link
             context.user_data['file_name'] = file_name
             
+            # Upload file using Telethon
+            telethon_client.loop.run_until_complete(upload_file_with_telethon(file_path, CHANNEL_ID))
+            
             update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
-            update.message.reply_text('Do you want to shorten this link? (yes/no)')
-            return ASK_SHORTEN_CONFIRMATION
+            update.message.reply_text('Please provide the file name for confirmation:')
+            return ASK_FILE_NAME
         else:
             update.message.reply_text('Failed to download the file. Please try again later.')
             return ConversationHandler.END
+
     except Exception as e:
         logging.error(f"Error processing document: {e}")
         update.message.reply_text('An error occurred while processing your file. Please try again later.')
@@ -143,12 +162,8 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
     if user_response == 'yes':
         short_link = context.user_data.get('short_link')
         file_name = context.user_data.get('file_name')
-        
-        # Format the file opener bot URL
-        file_opener_url = f"https://t.me/{FILE_OPENER_BOT_USERNAME}?start={requests.utils.quote(short_link)}&&file_name={requests.utils.quote(file_name)}"
-        
-        send_file_to_channel(file_path=f"/path/to/save/{file_name}", file_name=file_name)
-        update.message.reply_text(f'File posted to channel successfully.\nHere is the file opener bot link: {file_opener_url}')
+        post_to_channel(short_link, file_name)
+        update.message.reply_text('File posted to channel successfully.')
         return ConversationHandler.END
     elif user_response == 'no':
         update.message.reply_text('The file was not posted.')
@@ -198,4 +213,5 @@ def webhook():
         return 'error', 500
 
 if __name__ == '__main__':
+    telethon_client.start()  # Start Telethon client
     app.run(debug=True, port=int(os.environ.get('PORT', 5000)))
