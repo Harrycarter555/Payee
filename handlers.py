@@ -1,11 +1,8 @@
 import base64
-import io
 import logging
 import requests
-from googleapiclient.http import MediaIoBaseUpload
 from telegram import Update
 from telegram.ext import CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
-from app import drive_service, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME, GOOGLE_DRIVE_FOLDER_ID
 
 # Define states for conversation handler
 ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(2)
@@ -30,29 +27,6 @@ def shorten_url(long_url: str) -> str:
         logging.error(f"Request error: {e}")
         return long_url
 
-def upload_to_drive(file_content: bytes, file_name: str):
-    try:
-        file_metadata = {
-            'name': file_name,
-            'parents': [GOOGLE_DRIVE_FOLDER_ID]
-        }
-        media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype='application/octet-stream')
-        
-        file = drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id'
-        ).execute()
-        
-        file_id = file.get('id')
-        file_link = f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
-        logging.info(f"Uploaded file to Google Drive: {file_name}")
-        return file_link
-
-    except Exception as e:
-        logging.error(f"Error uploading to Google Drive: {e}")
-        return None
-
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Welcome! Please upload your file.')
 
@@ -66,24 +40,14 @@ def handle_document(update: Update, context: CallbackContext):
         
         logging.info(f"Received file URL: {file_url}")
 
-        # Download file content
-        response = requests.get(file_url)
-        file_content = response.content
-        
-        # Upload file to Google Drive and get the link
-        drive_link = upload_to_drive(file_content, file_name)
-        
-        if drive_link:
-            update.message.reply_text(f'File uploaded successfully. Here is your Google Drive link: {drive_link}')
+        # Provide the file URL
+        update.message.reply_text(f'File uploaded successfully. Here is the file URL: {file_url}')
 
-            # Ask user if they want to shorten the link
-            update.message.reply_text('Do you want to shorten this link? (yes/no)')
-            
-            context.user_data['drive_link'] = drive_link
-            return ASK_SHORTEN_CONFIRMATION
-        else:
-            update.message.reply_text('An error occurred while uploading your file. Please try again later.')
-            return ConversationHandler.END
+        # Ask user if they want to shorten the link
+        update.message.reply_text('Do you want to shorten this link? (yes/no)')
+        
+        context.user_data['file_url'] = file_url
+        return ASK_SHORTEN_CONFIRMATION
 
     except Exception as e:
         logging.error(f"Error processing document: {e}")
@@ -94,8 +58,8 @@ def ask_shorten_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
     
     if user_response == 'yes':
-        drive_link = context.user_data.get('drive_link')
-        short_link = shorten_url(drive_link)
+        file_url = context.user_data.get('file_url')
+        short_link = shorten_url(file_url)
         update.message.reply_text(f'Shortened link: {short_link}')
         
         # Ask user if they want to post the shortened link to the channel
@@ -104,12 +68,12 @@ def ask_shorten_confirmation(update: Update, context: CallbackContext):
         return ASK_POST_CONFIRMATION
 
     elif user_response == 'no':
-        drive_link = context.user_data.get('drive_link')
-        update.message.reply_text(f'Your Google Drive link: {drive_link}')
+        file_url = context.user_data.get('file_url')
+        update.message.reply_text(f'Your file link: {file_url}')
         
         # Ask user if they want to post the link to the channel
         update.message.reply_text('Do you want to post this link to the channel? (yes/no)')
-        context.user_data['short_link'] = drive_link
+        context.user_data['short_link'] = file_url
         return ASK_POST_CONFIRMATION
 
     else:
