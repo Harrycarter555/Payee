@@ -1,13 +1,13 @@
-# app.py
-
 import os
 import requests
 import logging
+import json
 from flask import Flask, request
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from telegram import Bot
-from telegram.ext import Dispatcher
+from telegram import Bot, Update
+from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler
+from handlers import start, handle_document, conversation_handler  # Ensure these are imported correctly
 
 app = Flask(__name__)
 
@@ -49,9 +49,6 @@ logging.basicConfig(level=logging.DEBUG)
 
 # Set maximum content length to None for unlimited size
 app.config['MAX_CONTENT_LENGTH'] = None
-
-# Import handlers after initializing the necessary components
-from handlers import conversation_handler
 
 # Add handlers to dispatcher
 dispatcher.add_handler(CommandHandler('start', start))
