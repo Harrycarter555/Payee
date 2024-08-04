@@ -160,7 +160,10 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 
 # Define conversation handler
 conversation_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.document, handle_document)],
+    entry_points=[
+        CommandHandler('start', start),  # Handle /start command
+        MessageHandler(Filters.document, handle_document)
+    ],
     states={
         ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
         ASK_SHORTEN_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_shorten_confirmation)],
