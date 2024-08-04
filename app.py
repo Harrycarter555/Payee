@@ -76,32 +76,30 @@ def handle_document(update: Update, context: CallbackContext):
         update.message.reply_text('Processing your file, please wait...')
         
         file = update.message.document.get_file()
-        file_url = file.file_path
+        file_id = update.message.document.file_id
         file_name = update.message.document.file_name
+        
+        # Get file information
+        file_info = bot.get_file(file_id)
+        file_url = file_info.file_path  # Retrieve the file path
         
         logging.info(f"Received file URL: {file_url}")
 
-        # Download file content
-        response = requests.get(file_url)
+        # Save the file locally if needed (depends on your use case)
+        # response = requests.get(file_url)
+        # if response.status_code == 200:
+        #     file_path = f"/path/to/save/{file_name}"
+        #     with open(file_path, "wb") as f:
+        #         f.write(response.content)
         
-        if response.status_code == 200:
-            # Save the file locally
-            file_path = f"/path/to/save/{file_name}"
-            with open(file_path, "wb") as f:
-                f.write(response.content)
-            
-            # Provide download link or path
-            file_link = file_url  # This is the direct URL to the file
-            context.user_data['file_link'] = file_link
-            context.user_data['file_name'] = file_name
-            
-            update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
-            update.message.reply_text('Do you want to shorten this link? (yes/no)')
-            return ASK_SHORTEN_CONFIRMATION
-        else:
-            update.message.reply_text('Failed to download the file. Please try again later.')
-            return ConversationHandler.END
-
+        # Provide download link or path
+        file_link = file_url  # This is the direct URL to the file
+        context.user_data['file_link'] = file_link
+        context.user_data['file_name'] = file_name
+        
+        update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
+        update.message.reply_text('Do you want to shorten this link? (yes/no)')
+        return ASK_SHORTEN_CONFIRMATION
     except Exception as e:
         logging.error(f"Error processing document: {e}")
         update.message.reply_text('An error occurred while processing your file. Please try again later.')
