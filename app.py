@@ -51,22 +51,18 @@ def shorten_url(long_url: str) -> str:
         logging.error(f"Request error: {e}")
         return long_url
 
-def post_to_channel(file_opener_url: str, file_name: str):
+def send_file_to_channel(file_path: str, file_name: str):
     try:
-        # Format the message to include direct file name and short link
-        message = (
-            f"📁 *File Name:* {file_name}\n"
-            f"🔗 *Link:* {file_opener_url}"
-        )
-        
-        bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=message,
-            parse_mode='Markdown'  # Use Markdown for better formatting options
-        )
-        logging.info(f"Posted to channel: {message}")
+        with open(file_path, 'rb') as file:
+            bot.send_document(
+                chat_id=CHANNEL_ID,
+                document=file,
+                caption=f"File Name: {file_name}",
+                parse_mode='Markdown'
+            )
+        logging.info(f"Sent file to channel: {file_name}")
     except Exception as e:
-        logging.error(f"Error posting to channel: {e}")
+        logging.error(f"Error sending file to channel: {e}")
 
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Welcome! Please upload your file.')
@@ -85,21 +81,24 @@ def handle_document(update: Update, context: CallbackContext):
         
         logging.info(f"Received file URL: {file_url}")
 
-        # Save the file locally if needed (depends on your use case)
-        # response = requests.get(file_url)
-        # if response.status_code == 200:
-        #     file_path = f"/path/to/save/{file_name}"
-        #     with open(file_path, "wb") as f:
-        #         f.write(response.content)
-        
-        # Provide download link or path
-        file_link = file_url  # This is the direct URL to the file
-        context.user_data['file_link'] = file_link
-        context.user_data['file_name'] = file_name
-        
-        update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
-        update.message.reply_text('Do you want to shorten this link? (yes/no)')
-        return ASK_SHORTEN_CONFIRMATION
+        # Save the file locally
+        file_path = f"/path/to/save/{file_name}"
+        response = requests.get(file_url)
+        if response.status_code == 200:
+            with open(file_path, "wb") as f:
+                f.write(response.content)
+            
+            # Provide download link
+            file_link = file_url
+            context.user_data['file_link'] = file_link
+            context.user_data['file_name'] = file_name
+            
+            update.message.reply_text(f'File processed successfully. Here is your link: {file_link}')
+            update.message.reply_text('Do you want to shorten this link? (yes/no)')
+            return ASK_SHORTEN_CONFIRMATION
+        else:
+            update.message.reply_text('Failed to download the file. Please try again later.')
+            return ConversationHandler.END
     except Exception as e:
         logging.error(f"Error processing document: {e}")
         update.message.reply_text('An error occurred while processing your file. Please try again later.')
@@ -144,8 +143,12 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
     if user_response == 'yes':
         short_link = context.user_data.get('short_link')
         file_name = context.user_data.get('file_name')
-        post_to_channel(short_link, file_name)
-        update.message.reply_text('File posted to channel successfully.')
+        
+        # Format the file opener bot URL
+        file_opener_url = f"https://t.me/{FILE_OPENER_BOT_USERNAME}?start={requests.utils.quote(short_link)}&&file_name={requests.utils.quote(file_name)}"
+        
+        send_file_to_channel(file_path=f"/path/to/save/{file_name}", file_name=file_name)
+        update.message.reply_text(f'File posted to channel successfully.\nHere is the file opener bot link: {file_opener_url}')
         return ConversationHandler.END
     elif user_response == 'no':
         update.message.reply_text('The file was not posted.')
