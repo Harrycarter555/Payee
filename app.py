@@ -1,5 +1,4 @@
 import os
-import base64
 import requests
 import logging
 from flask import Flask, request
@@ -25,9 +24,6 @@ dispatcher = Dispatcher(bot, None, workers=4)
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
-
-# Set maximum content length to None for unlimited size
-app.config['MAX_CONTENT_LENGTH'] = None
 
 # Define states for conversation handler
 ASK_FILE_NAME, ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(3)
