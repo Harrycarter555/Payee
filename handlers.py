@@ -1,4 +1,3 @@
-import base64
 import logging
 import requests
 from telegram import Update
@@ -7,25 +6,15 @@ from telegram.ext import CommandHandler, MessageHandler, Filters, ConversationHa
 # Define states for conversation handler
 ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(2)
 
-def shorten_url(long_url: str) -> str:
-    api_token = URL_SHORTENER_API_KEY
-    encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
-    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
-
+def upload_to_telegram(file_id: str, file_name: str):
     try:
-        response = requests.get(api_url)
-        response.raise_for_status()
-        
-        response_data = response.json()
-        if response_data.get("status") == "success":
-            short_url = response_data.get("shortenedUrl", "")
-            if short_url:
-                return short_url
-        logging.error("Unexpected response format")
-        return long_url
-    except requests.RequestException as e:
-        logging.error(f"Request error: {e}")
-        return long_url
+        # Send the file to the user
+        file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_id}"
+        logging.info(f"File URL: {file_url}")
+        return file_url
+    except Exception as e:
+        logging.error(f"Error sending file: {e}")
+        return None
 
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Welcome! Please upload your file.')
@@ -35,19 +24,25 @@ def handle_document(update: Update, context: CallbackContext):
         update.message.reply_text('Processing your file, please wait...')
         
         file = update.message.document.get_file()
-        file_url = file.file_path
+        file_id = file.file_id
         file_name = update.message.document.file_name
         
-        logging.info(f"Received file URL: {file_url}")
+        logging.info(f"Received file ID: {file_id}")
 
         # Provide the file URL
-        update.message.reply_text(f'File uploaded successfully. Here is the file URL: {file_url}')
-
-        # Ask user if they want to shorten the link
-        update.message.reply_text('Do you want to shorten this link? (yes/no)')
+        file_url = upload_to_telegram(file_id, file_name)
         
-        context.user_data['file_url'] = file_url
-        return ASK_SHORTEN_CONFIRMATION
+        if file_url:
+            update.message.reply_text(f'File uploaded successfully. Here is the file URL: {file_url}')
+
+            # Ask user if they want to shorten the link
+            update.message.reply_text('Do you want to shorten this link? (yes/no)')
+            
+            context.user_data['file_url'] = file_url
+            return ASK_SHORTEN_CONFIRMATION
+        else:
+            update.message.reply_text('An error occurred while processing your file. Please try again later.')
+            return ConversationHandler.END
 
     except Exception as e:
         logging.error(f"Error processing document: {e}")
@@ -61,7 +56,8 @@ def ask_shorten_confirmation(update: Update, context: CallbackContext):
 
     if user_response == 'yes':
         file_url = context.user_data.get('file_url')
-        short_link = shorten_url(file_url)
+        # Simulate shortening URL
+        short_link = file_url
         update.message.reply_text(f'Shortened link: {short_link}')
         
         # Ask user if they want to post the shortened link to the channel
@@ -101,8 +97,7 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 
 def post_to_channel(file_opener_url: str):
     try:
-        encoded_url = base64.b64encode(file_opener_url.encode()).decode()
-        message = f"https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}"
+        message = f"https://t.me/{FILE_OPENER_BOT_USERNAME}?start={file_opener_url}"
         bot.send_message(chat_id=CHANNEL_ID, text=message)
         logging.info(f"Posted to channel: {message}")
     except Exception as e:
