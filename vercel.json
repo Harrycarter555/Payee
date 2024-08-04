@@ -1,15 +1,28 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "app.py",
-      "use": "@vercel/python"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/app.py"
-    }
-  ]
+    "version": 2,
+    "builds": [
+        {
+            "src": "app.py",
+            "use": "@vercel/python",
+            "config": {
+                "maxLambdaSize": "2gb"  // Adjust based on your needs
+            }
+        }
+    ],
+    "routes": [
+        {
+            "src": "/webhook",
+            "methods": ["POST"],
+            "dest": "/app.py"
+        },
+        {
+            "src": "/setwebhook",
+            "methods": ["GET", "POST"],
+            "dest": "/app.py"
+        },
+        {
+            "src": "/",
+            "dest": "/app.py"
+        }
+    ]
 }
