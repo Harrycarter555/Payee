@@ -179,8 +179,9 @@ dispatcher.add_handler(conversation_handler)
 def home():
     return 'Hello, World!'
 
-@app.route(f'/{TELEGRAM_TOKEN}', methods=['POST'])
+@app.route('/webhook', methods=['POST'])
 def webhook():
+    logging.info('Webhook received')
     json_str = request.get_data(as_text=True)
     update = Update.de_json(json_str, bot)
     dispatcher.process_update(update)
