@@ -62,7 +62,6 @@ def shorten_url(long_url: str) -> str:
 
 def post_to_channel(file_opener_url: str, file_name: str):
     try:
-        # Format the message to include direct file name and short link
         message = (
             f"📁 *File Name:* {file_name}\n"
             f"🔗 *Link:* {file_opener_url}"
@@ -95,7 +94,7 @@ def handle_document(update: Update, context: CallbackContext):
         
         if response.status_code == 200:
             # Save the file locally
-            file_path = f"/path/to/save/{file_name}"
+            file_path = f"/tmp/{file_name}"  # Updated to /tmp directory
             with open(file_path, "wb") as f:
                 f.write(response.content)
             
