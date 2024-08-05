@@ -1,9 +1,12 @@
 import os
-import requests
+import asyncio
 import logging
+import requests
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -14,8 +17,13 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
+API_HASH = os.getenv('API_HASH')
+APP_ID = int(os.getenv('APP_ID'))
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+OWNER_ID = int(os.getenv('OWNER_ID'))
 
-if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME:
+if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME,
+            API_HASH, APP_ID, BOT_TOKEN, OWNER_ID]):
     error_message = (
         "One or more environment variables are not set. Please ensure the following "
         "environment variables are configured:\n"
@@ -23,13 +31,20 @@ if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHA
         "- WEBHOOK_URL\n"
         "- URL_SHORTENER_API_KEY\n"
         "- CHANNEL_ID\n"
-        "- FILE_OPENER_BOT_USERNAME"
+        "- FILE_OPENER_BOT_USERNAME\n"
+        "- API_HASH\n"
+        "- APP_ID\n"
+        "- BOT_TOKEN\n"
+        "- OWNER_ID"
     )
     raise ValueError(error_message)
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=4)
+
+# Initialize pyrogram bot
+xbot = Client('File-Sharing', api_id=APP_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -39,6 +54,67 @@ app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB
 
 # Define states for conversation handler
 ASK_FILE_NAME, ASK_SHORTEN_CONFIRMATION, ASK_POST_CONFIRMATION = range(3)
+
+START_BUTTONS = [
+    [
+        InlineKeyboardButton('Source', url='https://github.com/X-Gorn/File-Sharing'),
+        InlineKeyboardButton('Project Channel', url='https://t.me/xTeamBots'),
+    ],
+    [InlineKeyboardButton('Author', url="https://t.me/xgorn")],
+]
+
+async def handle_file(update, context):
+    try:
+        file = update.message.document.get_file()
+        file_url = file.file_path
+        file_name = update.message.document.file_name
+        file_size = update.message.document.file_size
+
+        if file_size <= 15 * 1024 * 1024:  # 15MB
+            await update.message.reply_text(f'File processed successfully. Here is your link: {file_url}')
+        else:
+            file_link = post_to_channel(file_url, file_name)
+            short_link = shorten_url(file_link)
+            await update.message.reply_text(f'File processed successfully. Here is your shortened link: {short_link}')
+        
+        await update.message.reply_text('Please provide the file name for confirmation:')
+        return ASK_FILE_NAME
+    except Exception as e:
+        logging.error(f"Error processing document: {e}")
+        await update.message.reply_text('An error occurred while processing your file. Please try again later.')
+        return ConversationHandler.END
+
+async def __reply(update, copied):
+    msg_id = copied.message_id
+    if copied.video:
+        unique_idx = copied.video.file_unique_id
+    elif copied.photo:
+        unique_idx = copied.photo.file_unique_id
+    elif copied.audio:
+        unique_idx = copied.audio.file_unique_id
+    elif copied.document:
+        unique_idx = copied.document.file_unique_id
+    elif copied.sticker:
+        unique_idx = copied.sticker.file_unique_id
+    elif copied.animation:
+        unique_idx = copied.animation.file_unique_id
+    elif copied.voice:
+        unique_idx = copied.voice.file_unique_id
+    elif copied.video_note:
+        unique_idx = copied.video_note.file_unique_id
+    else:
+        await copied.delete()
+        return
+
+    await update.reply_text(
+        'Here is Your Sharing Link:',
+        True,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton('Sharing Link',
+                                  url=f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={unique_idx.lower()}-{str(msg_id)}')]
+        ])
+    )
+    await asyncio.sleep(0.5)  # Wait to avoid 5 sec flood ban
 
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
@@ -63,7 +139,6 @@ def shorten_url(long_url: str) -> str:
 def post_to_channel(file_url: str, file_name: str) -> str:
     try:
         message = bot.send_document(chat_id=CHANNEL_ID, document=file_url, caption=file_name)
-        
         file_id = message.document.file_id
         file_link = f"https://t.me/{FILE_OPENER_BOT_USERNAME}/{file_id}"
         
@@ -73,98 +148,61 @@ def post_to_channel(file_url: str, file_name: str) -> str:
         logging.error(f"Error posting to channel: {e}")
         return ""
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text('Welcome! Please upload your file.')
+# Define conversation handler
+conversation_handler = ConversationHandler(
+    entry_points=[
+        CommandHandler('start', lambda update, context: update.message.reply_text('Welcome! Please upload your file.')),
+        MessageHandler(Filters.document, handle_file)
+    ],
+    states={
+        ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, lambda update, context: context.user_data.update({'file_name': update.message.text}) or update.message.reply_text(f'You provided the file name as: {update.message.text}\nDo you want to shorten this link? (yes/no)') or ASK_SHORTEN_CONFIRMATION)],
+        ASK_SHORTEN_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, lambda update, context: handle_shorten_confirmation(update, context))],
+        ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, lambda update, context: handle_post_confirmation(update, context))]
+    },
+    fallbacks=[],
+)
 
-def handle_document(update: Update, context: CallbackContext):
-    try:
-        update.message.reply_text('Processing your file, please wait...')
-        
-        file = update.message.document.get_file()
-        file_url = file.file_path
-        file_name = update.message.document.file_name
-        file_size = update.message.document.file_size
-        
-        logging.info(f"Received file URL: {file_url}, Size: {file_size} bytes")
-        
-        # Directly handle or process the file
-        if file_size <= 15 * 1024 * 1024:  # 15MB
-            update.message.reply_text(f'File processed successfully. Here is your link: {file_url}')
-        else:
-            # File is too large, upload to channel
-            file_link = post_to_channel(file_url, file_name)
-            short_link = shorten_url(file_link)
-            update.message.reply_text(f'File processed successfully. Here is your shortened link: {short_link}')
-            
-        update.message.reply_text('Please provide the file name for confirmation:')
-        return ASK_FILE_NAME
-    except Exception as e:
-        logging.error(f"Error processing document: {e}")
-        update.message.reply_text('An error occurred while processing your file. Please try again later.')
-        return ConversationHandler.END
-
-def ask_file_name(update: Update, context: CallbackContext):
-    file_name = update.message.text
-    context.user_data['file_name'] = file_name
-    
-    update.message.reply_text(f'You provided the file name as: {file_name}\nDo you want to shorten this link? (yes/no)')
-    return ASK_SHORTEN_CONFIRMATION
-
-def ask_shorten_confirmation(update: Update, context: CallbackContext):
+async def handle_shorten_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
     
     if user_response == 'yes':
         file_link = context.user_data.get('file_link')
         short_link = shorten_url(file_link)
-        update.message.reply_text(f'Shortened link: {short_link}')
+        await update.message.reply_text(f'Shortened link: {short_link}')
         
         # Ask user if they want to post the shortened link to the channel
-        update.message.reply_text('Do you want to post this link to the channel? (yes/no)')
+        await update.message.reply_text('Do you want to post this link to the channel? (yes/no)')
         context.user_data['short_link'] = short_link
         return ASK_POST_CONFIRMATION
 
     elif user_response == 'no':
         file_link = context.user_data.get('file_link')
-        update.message.reply_text(f'Your file link: {file_link}')
+        await update.message.reply_text(f'Your file link: {file_link}')
         
         # Ask user if they want to post the link to the channel
-        update.message.reply_text('Do you want to post this link to the channel? (yes/no)')
+        await update.message.reply_text('Do you want to post this link to the channel? (yes/no)')
         context.user_data['short_link'] = file_link
         return ASK_POST_CONFIRMATION
 
     else:
-        update.message.reply_text('Please respond with "yes" or "no".')
+        await update.message.reply_text('Please respond with "yes" or "no".')
         return ASK_SHORTEN_CONFIRMATION
 
-def ask_post_confirmation(update: Update, context: CallbackContext):
+async def handle_post_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
     
     if user_response == 'yes':
         short_link = context.user_data.get('short_link')
         file_name = context.user_data.get('file_name')
         post_to_channel(short_link, file_name)
-        update.message.reply_text('File posted to channel successfully.')
+        await update.message.reply_text('File posted to channel successfully.')
         return ConversationHandler.END
     elif user_response == 'no':
-        update.message.reply_text('The file was not posted.')
+        await update.message.reply_text('The file was not posted.')
         return ConversationHandler.END
     else:
-        update.message.reply_text('Please respond with "yes" or "no".')
+        await update.message.reply_text('Please respond with "yes" or "no".')
         return ASK_POST_CONFIRMATION
-
-# Define conversation handler
-conversation_handler = ConversationHandler(
-    entry_points=[
-        CommandHandler('start', start),
-        MessageHandler(Filters.document, handle_document)
-    ],
-    states={
-        ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
-        ASK_SHORTEN_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_shorten_confirmation)],
-        ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
-    },
-    fallbacks=[],
-)
 
 # Add handlers to dispatcher
 dispatcher.add_handler(conversation_handler)
@@ -193,4 +231,5 @@ def webhook():
         return 'error', 500
 
 if __name__ == '__main__':
+    xbot.run()
     app.run(debug=True, port=int(os.environ.get('PORT', 5000)))
