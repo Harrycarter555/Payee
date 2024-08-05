@@ -60,10 +60,9 @@ def shorten_url(long_url: str) -> str:
         logging.error(f"Request error: {e}")
         return long_url
 
-def post_to_channel(file_path: str, file_name: str) -> str:
+def post_to_channel(file_url: str, file_name: str) -> str:
     try:
-        with open(file_path, 'rb') as file:
-            message = bot.send_document(chat_id=CHANNEL_ID, document=file, caption=file_name)
+        message = bot.send_document(chat_id=CHANNEL_ID, document=file_url, caption=file_name)
         
         file_id = message.document.file_id
         file_link = f"https://t.me/{FILE_OPENER_BOT_USERNAME}/{file_id}"
@@ -87,31 +86,18 @@ def handle_document(update: Update, context: CallbackContext):
         file_size = update.message.document.file_size
         
         logging.info(f"Received file URL: {file_url}, Size: {file_size} bytes")
-
-        # Download file content
-        response = requests.get(file_url)
         
-        if response.status_code == 200:
-            # Save the file locally
-            file_path = f"/tmp/{file_name}"
-            with open(file_path, "wb") as f:
-                f.write(response.content)
-            
-            # Decide where to upload based on file size
-            if file_size <= 15 * 1024 * 1024:  # 15MB
-                update.message.reply_text(f'File processed successfully. Here is your link: {file_url}')
-            else:
-                # File is too large, upload to channel
-                file_link = post_to_channel(file_path, file_name)
-                short_link = shorten_url(file_link)
-                update.message.reply_text(f'File processed successfully. Here is your shortened link: {short_link}')
-                
-            update.message.reply_text('Please provide the file name for confirmation:')
-            return ASK_FILE_NAME
+        # Directly handle or process the file
+        if file_size <= 15 * 1024 * 1024:  # 15MB
+            update.message.reply_text(f'File processed successfully. Here is your link: {file_url}')
         else:
-            update.message.reply_text('Failed to download the file. Please try again later.')
-            return ConversationHandler.END
-
+            # File is too large, upload to channel
+            file_link = post_to_channel(file_url, file_name)
+            short_link = shorten_url(file_link)
+            update.message.reply_text(f'File processed successfully. Here is your shortened link: {short_link}')
+            
+        update.message.reply_text('Please provide the file name for confirmation:')
+        return ASK_FILE_NAME
     except Exception as e:
         logging.error(f"Error processing document: {e}")
         update.message.reply_text('An error occurred while processing your file. Please try again later.')
