@@ -2,9 +2,10 @@ from flask import Flask, request, send_from_directory
 import os
 import requests
 from telegram import Bot, Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import base64
 import logging
+from urllib.parse import quote
 from telethon import TelegramClient
 
 app = Flask(__name__)
@@ -22,8 +23,10 @@ USER_ID = os.getenv('USER_ID')  # User's Telegram ID
 if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME or not API_ID or not API_HASH or not USER_ID:
     raise ValueError("One or more environment variables are not set.")
 
-# Initialize Telegram bot application
-application = Application.builder().token(TELEGRAM_TOKEN).build()
+# Initialize Telegram bot
+bot = Bot(token=TELEGRAM_TOKEN)
+updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
+dispatcher = updater.dispatcher
 
 # Initialize Telethon client
 telethon_client = TelegramClient('session_name', API_ID, API_HASH)
@@ -53,7 +56,7 @@ def shorten_url(long_url: str) -> str:
         return long_url
 
 # Define the start command handler
-async def start(update: Update, context: CallbackContext):
+def start(update: Update, context: CallbackContext):
     try:
         if context.args:
             encoded_url = context.args[0]
@@ -65,69 +68,73 @@ async def start(update: Update, context: CallbackContext):
             logging.info(f"Shortened URL: {shortened_link}")
 
             # Provide information or further processing
-            await update.message.reply_text(f'Here is your shortened link: {shortened_link}')
+            update.message.reply_text(f'Here is your shortened link: {shortened_link}')
         else:
-            await update.message.reply_text('Welcome! Please use the link provided in the channel.')
+            update.message.reply_text('Welcome! Please use the link provided in the channel.')
     except Exception as e:
         logging.error(f"Error handling /start command: {e}")
-        await update.message.reply_text('An error occurred. Please try again later.')
+        update.message.reply_text('An error occurred. Please try again later.')
 
 # Define the handler for document uploads
-async def handle_document(update: Update, context: CallbackContext):
-    processing_message = await update.message.reply_text('Processing your file, please wait...')
+def handle_document(update: Update, context: CallbackContext):
+    processing_message = update.message.reply_text('Processing your file, please wait...')
     
-    file = await update.message.document.get_file()
+    file = update.message.document.get_file()
     file_url = file.file_path
     file_size = update.message.document.file_size
 
     if file_size > 20 * 1024 * 1024:  # File larger than 20 MB
         # Handle large file upload with Telethon
         context.user_data['file_path'] = file_url
-        await update.message.reply_text('File is too large. Uploading directly to your Telegram cloud storage. Please wait...')
+        update.message.reply_text('File is too large. Uploading directly to your Telegram cloud storage. Please wait...')
         # Start the file upload process
-        await upload_file_to_user_telegram(file_url)
+        upload_file_to_user_telegram(file_url)
         return ConversationHandler.END
     else:
         # Process URL shortening
         short_url = shorten_url(file_url)
         
         # Ask if user wants to post the shortened URL
-        await update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
         
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
 
 # Upload file to user's Telegram account
-async def upload_file_to_user_telegram(file_url: str):
-    await telethon_client.start()
-    try:
-        await telethon_client.send_file(USER_ID, file_url)
-        print('File uploaded successfully to user\'s Telegram cloud storage.')
-    except Exception as e:
-        print(f'Error uploading file: {e}')
-    await telethon_client.disconnect()
+def upload_file_to_user_telegram(file_url: str):
+    async def upload_file():
+        await telethon_client.start()
+        try:
+            await telethon_client.send_file(USER_ID, file_url)
+            print('File uploaded successfully to user\'s Telegram cloud storage.')
+        except Exception as e:
+            print(f'Error uploading file: {e}')
+        await telethon_client.disconnect()
+
+    with telethon_client:
+        telethon_client.loop.run_until_complete(upload_file())
 
 # Post the shortened URL to the channel
-async def post_to_channel(file_name: str, file_opener_url: str):
+def post_to_channel(file_name: str, file_opener_url: str):
     message = (f'File Name: {file_name}\n'
                f'Access the file using this link: {file_opener_url}')
-    await application.bot.send_message(chat_id=CHANNEL_ID, text=message)
+    bot.send_message(chat_id=CHANNEL_ID, text=message)
 
 # Define handlers for conversation
-async def ask_post_confirmation(update: Update, context: CallbackContext):
+def ask_post_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
     
     if user_response == 'yes':
-        await update.message.reply_text('Please provide the file name:')
+        update.message.reply_text('Please provide the file name:')
         return ASK_FILE_NAME
     elif user_response == 'no':
-        await update.message.reply_text('The file was not posted.')
+        update.message.reply_text('The file was not posted.')
         return ConversationHandler.END
     else:
-        await update.message.reply_text('Please respond with "yes" or "no".')
+        update.message.reply_text('Please respond with "yes" or "no".')
         return ASK_POST_CONFIRMATION
 
-async def ask_file_name(update: Update, context: CallbackContext):
+def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
 
@@ -139,33 +146,24 @@ async def ask_file_name(update: Update, context: CallbackContext):
         file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
 
         # Post the shortened URL to the channel
-        await post_to_channel(file_name, file_opener_url)
+        post_to_channel(file_name, file_opener_url)
         
-        await update.message.reply_text('File posted to channel successfully.')
+        update.message.reply_text('File posted to channel successfully.')
     else:
-        await update.message.reply_text('Failed to retrieve the shortened URL.')
+        update.message.reply_text('Failed to retrieve the shortened URL.')
     
     return ConversationHandler.END
 
-# Add handlers to application
-conversation_handler = ConversationHandler(
-    entry_points=[MessageHandler(filters.Document.ALL, handle_document)],
-    states={
-        ASK_POST_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_post_confirmation)],
-        ASK_FILE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_file_name)],
-    },
-    fallbacks=[],
-)
-
-application.add_handler(conversation_handler)
-application.add_handler(CommandHandler('start', start))
+# Add handlers to dispatcher
+dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
+dispatcher.add_handler(CommandHandler('start', start))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        application.process_update(update)
+        update = Update.de_json(request.get_json(force=True), bot)
+        dispatcher.process_update(update)
         return 'ok', 200
     except Exception as e:
         logging.error(f'Error processing update: {e}')
