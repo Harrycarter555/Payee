@@ -1,5 +1,5 @@
-Flask==2.0.3
-requests==2.28.2
-python-telegram-bot==20.0.0
-telethon==1.28.0
-werkzeug==2.0.3
+Flask
+requests
+python-telegram-bot
+telethon
+werkzeug
