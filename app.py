@@ -69,19 +69,24 @@ def start(update: Update, context: CallbackContext):
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
-    processing_message = update.message.reply_text('Processing your file, please wait...')
-    
-    file = update.message.document.get_file()
-    file_url = file.file_path
+    file = update.message.document
+    file_size = file.file_size
 
-    # Process URL shortening
-    short_url = shorten_url(file_url)
-    
-    # Ask if user wants to post the shortened URL
-    update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-    
-    context.user_data['short_url'] = short_url
-    return ASK_POST_CONFIRMATION
+    if file_size <= 20 * 1024 * 1024:  # 20 MB
+        file_url = file.get_file().file_path
+        # Process URL shortening
+        short_url = shorten_url(file_url)
+        
+        # Ask if user wants to post the shortened URL
+        update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        
+        context.user_data['short_url'] = short_url
+        return ASK_POST_CONFIRMATION
+    else:
+        # For large files, inform the user to upload via Telegram directly
+        update.message.reply_text('File is too large to process directly here. Please upload it via Telegram directly to the following link:\n'
+                                  f'https://t.me/{FILE_OPENER_BOT_USERNAME}')
+        return ConversationHandler.END
 
 # Post the shortened URL to the channel
 def post_to_channel(file_name: str, file_opener_url: str):
