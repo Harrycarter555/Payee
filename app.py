@@ -121,6 +121,8 @@ def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     context.user_data['file_name'] = file_name
     
+    logging.info(f"Received file name: {file_name}")
+    
     update.message.reply_text(f'You provided the file name as: {file_name}\nDo you want to shorten this link? (yes/no)')
     return ASK_SHORTEN_CONFIRMATION
 
