@@ -1,4 +1,4 @@
 Flask==2.3.2
 python-telegram-bot==13.7
 requests==2.28.2
-telethon==1.27.0
+pyrogram==1.27.0
