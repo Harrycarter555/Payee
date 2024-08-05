@@ -15,8 +15,9 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
+USER_ID = os.getenv('USER_ID')  # User ID for large file uploads
 
-if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME:
+if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME or not USER_ID:
     raise ValueError("One or more environment variables are not set.")
 
 # Initialize Telegram bot
@@ -83,9 +84,11 @@ def handle_document(update: Update, context: CallbackContext):
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
     else:
-        # For larger files, provide a link to upload via Telegram
-        update.message.reply_text(f'The file is too large to handle directly. Please upload it directly to the Telegram storage using this link:\n'
-                                  f'https://t.me/{FILE_OPENER_BOT_USERNAME}')
+        # For larger files, send the file directly to the specified user
+        file_id = file.file_id
+        bot.copy_message(chat_id=USER_ID, from_chat_id=update.message.chat_id, message_id=file.message_id)
+        
+        update.message.reply_text(f'The file is too large to handle directly in this chat. I have sent it directly to your Telegram account.')
         return ConversationHandler.END
 
 # Post the shortened URL to the channel
