@@ -74,9 +74,6 @@ def post_to_channel(file_path: str, file_name: str) -> str:
         logging.error(f"Error posting to channel: {e}")
         return ""
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text('Welcome! Please upload your file.')
-
 def handle_document(update: Update, context: CallbackContext):
     try:
         update.message.reply_text('Processing your file, please wait...')
@@ -89,13 +86,14 @@ def handle_document(update: Update, context: CallbackContext):
         logging.info(f"Received file URL: {file_url}, Size: {file_size} bytes")
 
         # Download file content
-        response = requests.get(file_url)
+        response = requests.get(file_url, stream=True)
         
         if response.status_code == 200:
             # Save the file locally
             file_path = f"/tmp/{file_name}"
             with open(file_path, "wb") as f:
-                f.write(response.content)
+                for chunk in response.iter_content(chunk_size=1024*1024):  # 1MB chunks
+                    f.write(chunk)
             
             # Decide where to upload based on file size
             if file_size <= 15 * 1024 * 1024:  # 15MB
@@ -107,6 +105,7 @@ def handle_document(update: Update, context: CallbackContext):
                 update.message.reply_text(f'File processed successfully. Here is your shortened link: {short_link}')
                 
             update.message.reply_text('Please provide the file name for confirmation:')
+            context.user_data['file_link'] = file_url  # Store file URL for later use
             return ASK_FILE_NAME
         else:
             update.message.reply_text('Failed to download the file. Please try again later.')
