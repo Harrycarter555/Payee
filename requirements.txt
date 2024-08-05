@@ -1,7 +1,8 @@
-Flask
-requests
-python-telegram-bot
-telethon
+Flask==2.0.3
+requests==2.28.2
+python-telegram-bot==20.0.0
+telethon==1.28.0
+python-dotenv==0.21.1
 werkzeug
 program 
-python-dotenv
+
