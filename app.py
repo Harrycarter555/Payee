@@ -83,8 +83,8 @@ def handle_document(update: Update, context: CallbackContext):
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
     else:
-        # For large files, inform the user to upload via Telegram directly
-        update.message.reply_text('File is too large to process directly here. Please upload it via Telegram directly to the following link:\n'
+        # For larger files, provide a link to upload via Telegram
+        update.message.reply_text(f'The file is too large to handle directly. Please upload it directly to the Telegram storage using this link:\n'
                                   f'https://t.me/{FILE_OPENER_BOT_USERNAME}')
         return ConversationHandler.END
 
