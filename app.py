@@ -63,7 +63,7 @@ START_BUTTONS = [
     [InlineKeyboardButton('Author', url="https://t.me/xgorn")],
 ]
 
-async def handle_file(update, context):
+async def handle_file(update: Update, context: CallbackContext):
     try:
         file = update.message.document.get_file()
         file_url = file.file_path
@@ -84,7 +84,7 @@ async def handle_file(update, context):
         await update.message.reply_text('An error occurred while processing your file. Please try again later.')
         return ConversationHandler.END
 
-async def __reply(update, copied):
+async def __reply(update: Update, copied):
     msg_id = copied.message_id
     if copied.video:
         unique_idx = copied.video.file_unique_id
