@@ -109,7 +109,7 @@ def ask_file_name(update: Update, context: CallbackContext):
 
     if short_url:
         short_url_encoded = quote(short_url, safe='')  # URL encode the short URL
-        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}'
+        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
 
         # Post the shortened URL to the channel
         post_to_channel(file_name, file_opener_url)
