@@ -6,6 +6,7 @@ from telegram.ext import Dispatcher, CommandHandler, CallbackContext, MessageHan
 import base64
 import logging
 from urllib.parse import quote
+from telethon import TelegramClient
 
 app = Flask(__name__)
 
@@ -15,14 +16,19 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
-USER_ID = os.getenv('USER_ID')  # User ID for large file uploads
+API_ID = os.getenv('API_ID')  # API ID for telethon
+API_HASH = os.getenv('API_HASH')  # API Hash for telethon
+USER_ID = os.getenv('USER_ID')  # User's Telegram ID
 
-if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME or not USER_ID:
+if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME or not API_ID or not API_HASH or not USER_ID:
     raise ValueError("One or more environment variables are not set.")
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=0)
+
+# Initialize Telethon client
+telethon_client = TelegramClient('session_name', API_ID, API_HASH)
 
 # Define states for conversation handler
 ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
@@ -70,11 +76,20 @@ def start(update: Update, context: CallbackContext):
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
-    file = update.message.document
-    file_size = file.file_size
+    processing_message = update.message.reply_text('Processing your file, please wait...')
+    
+    file = update.message.document.get_file()
+    file_url = file.file_path
+    file_size = update.message.document.file_size
 
-    if file_size <= 20 * 1024 * 1024:  # 20 MB
-        file_url = file.get_file().file_path
+    if file_size > 20 * 1024 * 1024:  # File larger than 20 MB
+        # Handle large file upload with Telethon
+        context.user_data['file_path'] = file_url
+        update.message.reply_text('File is too large. Uploading directly to your Telegram cloud storage. Please wait...')
+        # Start the file upload process
+        upload_file_to_user_telegram(file_url)
+        return ConversationHandler.END
+    else:
         # Process URL shortening
         short_url = shorten_url(file_url)
         
@@ -83,13 +98,20 @@ def handle_document(update: Update, context: CallbackContext):
         
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
-    else:
-        # For larger files, send the file directly to the specified user
-        file_id = file.file_id
-        bot.copy_message(chat_id=USER_ID, from_chat_id=update.message.chat_id, message_id=file.message_id)
-        
-        update.message.reply_text(f'The file is too large to handle directly in this chat. I have sent it directly to your Telegram account.')
-        return ConversationHandler.END
+
+# Upload file to user's Telegram account
+def upload_file_to_user_telegram(file_url: str):
+    async def upload_file():
+        await telethon_client.start()
+        try:
+            await telethon_client.send_file(USER_ID, file_url)
+            print('File uploaded successfully to user\'s Telegram cloud storage.')
+        except Exception as e:
+            print(f'Error uploading file: {e}')
+        await telethon_client.disconnect()
+
+    with telethon_client:
+        telethon_client.loop.run_until_complete(upload_file())
 
 # Post the shortened URL to the channel
 def post_to_channel(file_name: str, file_opener_url: str):
