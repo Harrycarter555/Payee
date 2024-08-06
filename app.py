@@ -6,10 +6,6 @@ from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import base64
 from telethon import TelegramClient
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
 
 app = Flask(__name__)
 
@@ -23,6 +19,7 @@ API_ID = os.getenv('API_ID')
 API_HASH = os.getenv('API_HASH')
 USER_ID = os.getenv('USER_ID')
 
+# Check for missing environment variables
 if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME, API_ID, API_HASH, USER_ID]):
     missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'URL_SHORTENER_API_KEY', 'CHANNEL_ID', 'FILE_OPENER_BOT_USERNAME', 'API_ID', 'API_HASH', 'USER_ID'] if not os.getenv(var)]
     raise ValueError(f"Environment variables missing: {', '.join(missing_vars)}")
@@ -137,7 +134,7 @@ def ask_file_name(update: Update, context: CallbackContext):
 
     if short_url:
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
-        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
+        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&{file_name}'
 
         post_to_channel(file_name, file_opener_url)
         
@@ -186,4 +183,4 @@ def favicon():
 
 if __name__ == '__main__':
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
-    app.run(port=5000)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
