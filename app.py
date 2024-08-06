@@ -90,7 +90,7 @@ def handle_document(update: Update, context: CallbackContext):
         # Handle large files
         context.user_data['file_url'] = file_url
         update.message.reply_text('File is too large for direct processing. Uploading directly to your Telegram cloud storage. Please wait...')
-        asyncio.create_task(upload_large_file(file_url, update.message))
+        asyncio.ensure_future(upload_large_file(file_url, update.message))  # Use ensure_future for proper async handling
         return ASK_POST_CONFIRMATION
     else:
         # Process smaller files
@@ -108,17 +108,23 @@ async def upload_large_file(file_url: str, message):
         # Download the file
         file_path = os.path.basename(file_url)
         start_time = time.time()
+        logging.info(f"Starting download for file: {file_url}")
 
         # Download the file using Telethon
         await telethon_client.download_media(file_url, file_name=file_path)
+        download_time = time.time() - start_time
+        logging.info(f"Download completed in {download_time} seconds")
 
         # Upload the file to user's Telegram cloud storage
+        logging.info(f"Uploading file to user storage")
         await telethon_client.send_file(USER_ID, file=file_path, caption='Here is your file.')
 
         # Notify user
+        logging.info(f"Sending notification to user")
         await telethon_client.send_message(USER_ID, 'File uploaded successfully. You can check your storage.')
 
         # Get the file's download link
+        logging.info(f"Getting file download link")
         file_message = await telethon_client.get_messages(USER_ID, limit=1)
         file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_message[0].document.file_name}'
 
