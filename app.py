@@ -15,6 +15,12 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 
+# Enable Flask debugging
+app.debug = True
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
@@ -65,17 +71,7 @@ def shorten_url(long_url: str) -> str:
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
     try:
-        if context.args:
-            encoded_url = context.args[0]
-            decoded_url = base64.b64decode(encoded_url).decode('utf-8')
-            logging.info(f"Decoded URL: {decoded_url}")
-
-            shortened_link = shorten_url(decoded_url)
-            logging.info(f"Shortened URL: {shortened_link}")
-
-            update.message.reply_text(f'Here is your shortened link: {shortened_link}')
-        else:
-            update.message.reply_text('Welcome! Please use the link provided in the channel.')
+        update.message.reply_text('Please upload your file.')
     except Exception as e:
         logging.error(f"Error handling /start command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
@@ -89,14 +85,17 @@ def handle_document(update: Update, context: CallbackContext):
     file_size = update.message.document.file_size
 
     if file_size > 20 * 1024 * 1024:
+        # Handle large files
         context.user_data['file_path'] = file_url
         update.message.reply_text('File is too large. Uploading directly to your Telegram cloud storage. Please wait...')
         upload_file_to_user_telegram(file_url)
+        update.message.reply_text('File uploaded. You can access it in your Telegram cloud storage.')
         return ConversationHandler.END
     else:
+        # Process smaller files
+        context.user_data['file_path'] = file_url
         short_url = shorten_url(file_url)
         update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-        
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
 
@@ -189,5 +188,5 @@ def favicon():
 
 # Run the app
 if __name__ == '__main__':
-    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
+    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 80)))
