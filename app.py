@@ -105,6 +105,9 @@ def upload_file_to_user_telegram(file_url: str, user_chat_id: int):
         try:
             # Download the file
             file = await telethon_client.download_media(file_url)
+            if not file:
+                logging.error('Failed to download the file.')
+                return
             # Upload the file to user's Telegram cloud storage
             await telethon_client.send_file(user_chat_id, file)
             logging.info('File uploaded successfully to user\'s Telegram cloud storage.')
