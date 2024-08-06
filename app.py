@@ -111,13 +111,18 @@ def upload_file_to_user_telegram(file_url: str, user_chat_id: int):
             # Upload the file to user's Telegram cloud storage
             await telethon_client.send_file(user_chat_id, file)
             logging.info('File uploaded successfully to user\'s Telegram cloud storage.')
+            # Get file link from Telegram cloud storage
+            file_info = await telethon_client.get_messages(user_chat_id, limit=1)
+            if file_info:
+                file_url = file_info[0].media.document.file_id
+                return file_url
         except Exception as e:
             logging.error(f'Error uploading file: {e}')
         finally:
             await telethon_client.disconnect()
 
     with telethon_client:
-        telethon_client.loop.run_until_complete(upload_file())
+        return telethon_client.loop.run_until_complete(upload_file())
 
 # Post the shortened URL to the channel
 def post_to_channel(file_name: str, file_opener_url: str):
