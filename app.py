@@ -2,10 +2,14 @@ import logging
 from flask import Flask, request, send_from_directory
 import os
 import requests
+from dotenv import load_dotenv
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import base64
 from telethon import TelegramClient
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
