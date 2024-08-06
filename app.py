@@ -84,21 +84,20 @@ def handle_document(update: Update, context: CallbackContext):
     file_url = file.file_path
     file_size = update.message.document.file_size
 
-    if file_size > 20 * 1024 * 1024:
-        # Handle large files
-        context.user_data['file_url'] = file_url
-        update.message.reply_text('File is too large for direct processing. Uploading directly to your Telegram cloud storage. Please wait...')
-        upload_file_to_user_telegram(file_url, USER_ID, update.message.chat_id)
-        processing_message.edit_text('File uploaded successfully to your cloud storage. You will receive a confirmation soon.')
-        return ConversationHandler.END
-    else:
-        # Process smaller files
-        download_link = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_url}'
-        context.user_data['file_url'] = download_link
-        short_url = shorten_url(download_link)
-        update.message.reply_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-        context.user_data['short_url'] = short_url
-        return ASK_POST_CONFIRMATION
+    # Handle file upload to user cloud storage
+    context.user_data['file_url'] = file_url
+    context.user_data['file_size'] = file_size
+    
+    update.message.reply_text('Uploading your file to your Telegram cloud storage. Please wait...')
+    upload_file_to_user_telegram(file_url, USER_ID, update.message.chat_id)
+
+    # Once upload is complete, send the download link and shortened URL
+    download_link = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/{file_url}'
+    short_url = shorten_url(download_link)
+    
+    processing_message.edit_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+    context.user_data['short_url'] = short_url
+    return ASK_POST_CONFIRMATION
 
 # Upload file to user's Telegram account
 def upload_file_to_user_telegram(file_url: str, user_id: int, chat_id: int):
