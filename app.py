@@ -93,8 +93,8 @@ def handle_document(update: Update, context: CallbackContext):
     else:
         # Process smaller files
         context.user_data['file_url'] = file_url
-        # Send download link
-        download_link = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/file{file.file_path}"
+        # Generate download link
+        download_link = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_url}"
         short_url = shorten_url(download_link)
         context.user_data['download_link'] = download_link
         update.message.reply_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
@@ -129,8 +129,6 @@ def post_to_channel(file_name: str, file_opener_url: str):
 def ask_post_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
     
-    logging.info(f"User response: {user_response}")
-
     if user_response == 'yes':
         update.message.reply_text('Please provide the file name:')
         return ASK_FILE_NAME
@@ -144,9 +142,8 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
-    download_link = context.user_data.get('download_link')
 
-    if short_url and download_link:
+    if short_url:
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
         file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
 
@@ -154,24 +151,13 @@ def ask_file_name(update: Update, context: CallbackContext):
         
         update.message.reply_text('File posted to channel successfully.')
     else:
-        update.message.reply_text('Failed to retrieve the shortened URL or download link.')
+        update.message.reply_text('Failed to retrieve the shortened URL.')
     
     return ConversationHandler.END
 
 # Add handlers to dispatcher
 dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
 dispatcher.add_handler(CommandHandler('start', start))
-
-# Add conversation handler
-conversation_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
-    states={
-        ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
-        ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)]
-    },
-    fallbacks=[]
-)
-dispatcher.add_handler(conversation_handler)
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
