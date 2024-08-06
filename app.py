@@ -8,6 +8,7 @@ from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandle
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
 from dotenv import load_dotenv
+import asyncio
 
 # Load environment variables from .env file
 load_dotenv()
@@ -88,35 +89,40 @@ def handle_document(update: Update, context: CallbackContext):
     context.user_data['file_url'] = file_url
     context.user_data['file_size'] = file_size
     
-    update.message.reply_text('Uploading your file to your Telegram cloud storage. Please wait...')
-    upload_file_to_user_telegram(file_url, USER_ID, update.message.chat_id)
-
-    # Once upload is complete, send the download link and shortened URL
-    download_link = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/{file_url}'
-    short_url = shorten_url(download_link)
-    
-    processing_message.edit_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-    context.user_data['short_url'] = short_url
-    return ASK_POST_CONFIRMATION
+    if file_size > 20 * 1024 * 1024:  # File larger than 20MB
+        update.message.reply_text('Uploading your file to your Telegram cloud storage. Please wait...')
+        asyncio.run(upload_file_to_user_telegram(file_url, USER_ID, update.message.chat_id))
+    else:
+        # Send file to the bot's cloud storage if needed
+        context.user_data['file_url'] = file_url
+        download_link = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_url}'
+        short_url = shorten_url(download_link)
+        
+        processing_message.edit_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        context.user_data['short_url'] = short_url
+        return ASK_POST_CONFIRMATION
 
 # Upload file to user's Telegram account
-def upload_file_to_user_telegram(file_url: str, user_id: int, chat_id: int):
-    async def upload_file():
+async def upload_file_to_user_telegram(file_url: str, user_id: int, chat_id: int):
+    try:
         await telethon_client.start()
-        try:
-            # Download the file from Telegram
-            file_path = await telethon_client.download_media(file_url)
-            # Upload the file to user's Telegram cloud storage
-            await telethon_client.send_file(user_id, file_path)
-            logging.info('File uploaded successfully to user\'s Telegram cloud storage.')
-        except Exception as e:
-            logging.error(f'Error uploading file: {e}')
-            bot.send_message(chat_id=chat_id, text='Error uploading file to your cloud storage.')
-        finally:
-            await telethon_client.disconnect()
+        # Download the file from Telegram
+        file_path = await telethon_client.download_media(file_url)
 
-    with telethon_client:
-        telethon_client.loop.run_until_complete(upload_file())
+        # Upload the file to user's Telegram cloud storage
+        message = await telethon_client.send_file(user_id, file_path)
+        
+        # Construct download link from file_id
+        file_id = message.media.document.id
+        file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_id}'
+        
+        # Send confirmation to the user
+        bot.send_message(chat_id=chat_id, text=f'File uploaded successfully to your Telegram cloud storage. Here is your download link: {file_url}\n\nDo you want to post this link to the channel? (yes/no)')
+    except Exception as e:
+        logging.error(f'Error uploading file: {e}')
+        bot.send_message(chat_id=chat_id, text='Error uploading file to your cloud storage.')
+    finally:
+        await telethon_client.disconnect()
 
 # Post the shortened URL to the channel
 def post_to_channel(file_name: str, file_opener_url: str):
