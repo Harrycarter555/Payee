@@ -93,8 +93,15 @@ def handle_document(update: Update, context: CallbackContext):
     else:
         # Process smaller files
         context.user_data['file_url'] = file_url
+        download_link = file_url  # Placeholder for actual download link retrieval
+        context.user_data['download_link'] = download_link
         short_url = shorten_url(file_url)
-        update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        
+        if short_url == file_url:
+            update.message.reply_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nThe URL shortening failed or was not needed. Do you want to post this link to the channel? (yes/no)')
+        else:
+            update.message.reply_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
 
@@ -146,6 +153,7 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
+    download_link = context.user_data.get('download_link')
 
     if short_url:
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
