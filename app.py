@@ -1,14 +1,15 @@
 import logging
 import os
-import base64
-import requests
+import asyncio
 from flask import Flask, request, send_from_directory
+import requests
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
+from telethon.tl.functions.messages import UploadMedia
+from telethon.tl.types import DocumentAttributeFilename
 from dotenv import load_dotenv
-import asyncio
 
 # Load environment variables from .env file
 load_dotenv()
@@ -85,42 +86,42 @@ def handle_document(update: Update, context: CallbackContext):
     file_url = file.file_path
     file_size = update.message.document.file_size
 
-    # Handle file upload to user cloud storage
-    context.user_data['file_url'] = file_url
-    context.user_data['file_size'] = file_size
-    
-    if file_size > 20 * 1024 * 1024:  # File larger than 20MB
-        update.message.reply_text('Uploading your file to your Telegram cloud storage. Please wait...')
-        asyncio.run(upload_file_to_user_telegram(file_url, USER_ID, update.message.chat_id))
-    else:
-        # Send file to the bot's cloud storage if needed
+    if file_size > 20 * 1024 * 1024:
+        # Handle large files
         context.user_data['file_url'] = file_url
-        download_link = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_url}'
-        short_url = shorten_url(download_link)
-        
-        processing_message.edit_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        update.message.reply_text('File is too large for direct processing. Uploading directly to your Telegram cloud storage. Please wait...')
+        asyncio.run(upload_large_file(file_url, update.message.chat_id))
+        return ASK_POST_CONFIRMATION
+    else:
+        # Process smaller files
+        context.user_data['file_url'] = file_url
+        short_url = shorten_url(file_url)
+        update.message.reply_text(f'File uploaded successfully. Here is your download link: {file_url}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
 
-# Upload file to user's Telegram account
-async def upload_file_to_user_telegram(file_url: str, user_id: int, chat_id: int):
+# Upload large file to user's Telegram cloud storage
+async def upload_large_file(file_url: str, user_chat_id: int):
     try:
         await telethon_client.start()
-        # Download the file from Telegram
-        file_path = await telethon_client.download_media(file_url)
-
+        
+        # Download the file
+        file_path = await telethon_client.download_media(file_url, file_name=os.path.basename(file_url))
+        
         # Upload the file to user's Telegram cloud storage
-        message = await telethon_client.send_file(user_id, file_path)
-        
-        # Construct download link from file_id
-        file_id = message.media.document.id
-        file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_id}'
-        
+        await telethon_client.send_file(user_chat_id, file=file_path, caption='Here is your file.')
+
+        # Get the file's download link
+        file_id = await telethon_client.get_messages(user_chat_id, limit=1)
+        file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_id[0].document.file_name}'
+
         # Send confirmation to the user
-        bot.send_message(chat_id=chat_id, text=f'File uploaded successfully to your Telegram cloud storage. Here is your download link: {file_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        await telethon_client.send_message(user_chat_id, f'File uploaded successfully. Here is your download link: {file_url}')
+    
     except Exception as e:
         logging.error(f'Error uploading file: {e}')
-        bot.send_message(chat_id=chat_id, text='Error uploading file to your cloud storage.')
+        await telethon_client.send_message(user_chat_id, 'Error uploading file.')
+
     finally:
         await telethon_client.disconnect()
 
