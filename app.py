@@ -1,12 +1,13 @@
 import logging
-from flask import Flask, request, send_from_directory
 import os
+from flask import Flask, request, send_from_directory
 import requests
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import base64
 from telethon import TelegramClient
-from dotenv import load_dotenv  # Import the load_dotenv function
+from telethon.sessions import MemorySession
+from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
@@ -34,8 +35,8 @@ bot = Bot(token=TELEGRAM_TOKEN)
 updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 dispatcher = updater.dispatcher
 
-# Initialize Telethon client
-telethon_client = TelegramClient('session_name', API_ID, API_HASH)
+# Initialize Telethon client with in-memory session
+telethon_client = TelegramClient(MemorySession(), API_ID, API_HASH)
 
 # Define states for conversation handler
 ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
@@ -49,7 +50,7 @@ def shorten_url(long_url: str) -> str:
     try:
         response = requests.get(api_url)
         response.raise_for_status()
-
+        
         response_data = response.json()
         if response_data.get("status") == "success":
             short_url = response_data.get("shortenedUrl", "")
@@ -82,7 +83,7 @@ def start(update: Update, context: CallbackContext):
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
     processing_message = update.message.reply_text('Processing your file, please wait...')
-
+    
     file = update.message.document.get_file()
     file_url = file.file_path
     file_size = update.message.document.file_size
@@ -95,7 +96,7 @@ def handle_document(update: Update, context: CallbackContext):
     else:
         short_url = shorten_url(file_url)
         update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-
+        
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
 
@@ -122,7 +123,7 @@ def post_to_channel(file_name: str, file_opener_url: str):
 # Define handlers for conversation
 def ask_post_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
-
+    
     if user_response == 'yes':
         update.message.reply_text('Please provide the file name:')
         return ASK_FILE_NAME
@@ -142,11 +143,11 @@ def ask_file_name(update: Update, context: CallbackContext):
         file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&{file_name}'
 
         post_to_channel(file_name, file_opener_url)
-
+        
         update.message.reply_text('File posted to channel successfully.')
     else:
         update.message.reply_text('Failed to retrieve the shortened URL.')
-
+    
     return ConversationHandler.END
 
 # Add handlers to dispatcher
@@ -189,4 +190,4 @@ def favicon():
 # Run the app
 if __name__ == '__main__':
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 443)))
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 80)))
