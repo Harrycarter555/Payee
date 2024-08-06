@@ -86,29 +86,32 @@ def handle_document(update: Update, context: CallbackContext):
 
     if file_size > 20 * 1024 * 1024:
         # Handle large files
-        context.user_data['file_path'] = file_url
+        context.user_data['file_url'] = file_url
         update.message.reply_text('File is too large for direct processing. Uploading directly to your Telegram cloud storage. Please wait...')
-        upload_file_to_user_telegram(file_url)
-        update.message.reply_text(f'File uploaded to your Telegram cloud storage. Access it [here]({file_url}).\n\nDo you want to shorten this link and post it to the channel? (yes/no)')
+        upload_file_to_user_telegram(file_url, update.message.chat_id)
         return ASK_POST_CONFIRMATION
     else:
         # Process smaller files
-        context.user_data['file_path'] = file_url
+        context.user_data['file_url'] = file_url
         short_url = shorten_url(file_url)
         update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
 
 # Upload file to user's Telegram account
-def upload_file_to_user_telegram(file_url: str):
+def upload_file_to_user_telegram(file_url: str, user_chat_id: int):
     async def upload_file():
         await telethon_client.start()
         try:
-            await telethon_client.send_file(USER_ID, file_url)
+            # Download the file
+            file = await telethon_client.download_media(file_url)
+            # Upload the file to user's Telegram cloud storage
+            await telethon_client.send_file(user_chat_id, file)
             logging.info('File uploaded successfully to user\'s Telegram cloud storage.')
         except Exception as e:
             logging.error(f'Error uploading file: {e}')
-        await telethon_client.disconnect()
+        finally:
+            await telethon_client.disconnect()
 
     with telethon_client:
         telethon_client.loop.run_until_complete(upload_file())
