@@ -97,8 +97,8 @@ def handle_document(update: Update, context: CallbackContext):
         download_link = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_url}"
         short_url = shorten_url(download_link)
         context.user_data['download_link'] = download_link
-        update.message.reply_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
         context.user_data['short_url'] = short_url
+        update.message.reply_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
         return ASK_POST_CONFIRMATION
 
 # Upload file to user's Telegram account
