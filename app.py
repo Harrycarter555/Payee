@@ -88,8 +88,9 @@ def handle_document(update: Update, context: CallbackContext):
         # Handle large files
         context.user_data['file_url'] = file_url
         update.message.reply_text('File is too large for direct processing. Uploading directly to your Telegram cloud storage. Please wait...')
-        upload_file_to_user_telegram(file_url, USER_ID)
-        return ASK_POST_CONFIRMATION
+        upload_file_to_user_telegram(file_url, USER_ID, update.message.chat_id)
+        processing_message.edit_text('File uploaded successfully to your cloud storage. You will receive a confirmation soon.')
+        return ConversationHandler.END
     else:
         # Process smaller files
         download_link = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_url}'
@@ -100,7 +101,7 @@ def handle_document(update: Update, context: CallbackContext):
         return ASK_POST_CONFIRMATION
 
 # Upload file to user's Telegram account
-def upload_file_to_user_telegram(file_url: str, user_id: int):
+def upload_file_to_user_telegram(file_url: str, user_id: int, chat_id: int):
     async def upload_file():
         await telethon_client.start()
         try:
@@ -111,6 +112,7 @@ def upload_file_to_user_telegram(file_url: str, user_id: int):
             logging.info('File uploaded successfully to user\'s Telegram cloud storage.')
         except Exception as e:
             logging.error(f'Error uploading file: {e}')
+            bot.send_message(chat_id=chat_id, text='Error uploading file to your cloud storage.')
         finally:
             await telethon_client.disconnect()
 
