@@ -1,19 +1,18 @@
 import logging
-import os
 from flask import Flask, request, send_from_directory
+import os
 import requests
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import base64
 from telethon import TelegramClient
-from telethon.sessions import MemorySession
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
 
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -35,8 +34,8 @@ bot = Bot(token=TELEGRAM_TOKEN)
 updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 dispatcher = updater.dispatcher
 
-# Initialize Telethon client with in-memory session
-telethon_client = TelegramClient(MemorySession(), API_ID, API_HASH)
+# Initialize Telethon client
+telethon_client = TelegramClient('session_name', API_ID, API_HASH)
 
 # Define states for conversation handler
 ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
@@ -64,21 +63,7 @@ def shorten_url(long_url: str) -> str:
 
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
-    try:
-        if context.args:
-            encoded_url = context.args[0]
-            decoded_url = base64.b64decode(encoded_url).decode('utf-8')
-            logging.info(f"Decoded URL: {decoded_url}")
-
-            shortened_link = shorten_url(decoded_url)
-            logging.info(f"Shortened URL: {shortened_link}")
-
-            update.message.reply_text(f'Here is your shortened link: {shortened_link}')
-        else:
-            update.message.reply_text('Welcome! Please use the link provided in the channel.')
-    except Exception as e:
-        logging.error(f"Error handling /start command: {e}")
-        update.message.reply_text('An error occurred. Please try again later.')
+    update.message.reply_text('Please upload your file.')
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
@@ -88,9 +73,9 @@ def handle_document(update: Update, context: CallbackContext):
     file_url = file.file_path
     file_size = update.message.document.file_size
 
-    if file_size > 20 * 1024 * 1024:
+    if file_size > 20 * 1024 * 1024:  # Larger than 20MB
         context.user_data['file_path'] = file_url
-        update.message.reply_text('File is too large. Uploading directly to your Telegram cloud storage. Please wait...')
+        update.message.reply_text('File is too large to process directly. Uploading to your Telegram cloud storage. Please wait...')
         upload_file_to_user_telegram(file_url)
         return ConversationHandler.END
     else:
@@ -189,5 +174,5 @@ def favicon():
 
 # Run the app
 if __name__ == '__main__':
-    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 80)))
+    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # Set max content length to 2GB
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 443)))
