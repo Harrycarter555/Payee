@@ -82,7 +82,8 @@ def handle_document(update: Update, context: CallbackContext):
     
     file = update.message.document.get_file()
     file_id = update.message.document.file_id
-    file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file.file_path}"
+    file_path = file.file_path  # Extract the file path from the response
+    file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
     file_size = update.message.document.file_size
 
     if file_size > 20 * 1024 * 1024:
