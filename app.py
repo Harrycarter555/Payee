@@ -7,6 +7,7 @@ from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandle
 import base64
 from telethon import TelegramClient
 
+# Initialize Flask app
 app = Flask(__name__)
 
 # Load configuration from environment variables
@@ -100,9 +101,9 @@ def upload_file_to_user_telegram(file_url: str):
         await telethon_client.start()
         try:
             await telethon_client.send_file(USER_ID, file_url)
-            print('File uploaded successfully to user\'s Telegram cloud storage.')
+            logging.info('File uploaded successfully to user\'s Telegram cloud storage.')
         except Exception as e:
-            print(f'Error uploading file: {e}')
+            logging.error(f'Error uploading file: {e}')
         await telethon_client.disconnect()
 
     with telethon_client:
@@ -181,6 +182,7 @@ def setup_webhook():
 def favicon():
     return send_from_directory('static', 'favicon.ico')
 
+# Run the app
 if __name__ == '__main__':
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 443)))
