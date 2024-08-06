@@ -7,7 +7,6 @@ from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
-from telethon.tl.functions.messages import UploadMedia
 from telethon.tl.types import DocumentAttributeFilename
 from dotenv import load_dotenv
 
@@ -112,8 +111,8 @@ async def upload_large_file(file_url: str, user_chat_id: int):
         await telethon_client.send_file(user_chat_id, file=file_path, caption='Here is your file.')
 
         # Get the file's download link
-        file_id = await telethon_client.get_messages(user_chat_id, limit=1)
-        file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_id[0].document.file_name}'
+        message = await telethon_client.get_messages(user_chat_id, limit=1)
+        file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{message[0].document.file_name}'
 
         # Send confirmation to the user
         await telethon_client.send_message(user_chat_id, f'File uploaded successfully. Here is your download link: {file_url}')
