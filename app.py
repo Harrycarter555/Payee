@@ -88,42 +88,31 @@ def handle_document(update: Update, context: CallbackContext):
         # Handle large files
         context.user_data['file_url'] = file_url
         update.message.reply_text('File is too large for direct processing. Uploading directly to your Telegram cloud storage. Please wait...')
-        upload_file_to_user_telegram(file_url, update.message.chat_id, context)
+        upload_file_to_user_telegram(file_url, update.message.chat_id)
         return ASK_POST_CONFIRMATION
     else:
         # Process smaller files
         context.user_data['file_url'] = file_url
-        download_link = file_url  # Placeholder for actual download link retrieval
+        # Send download link
+        download_link = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/file{file.file_path}"
+        short_url = shorten_url(download_link)
         context.user_data['download_link'] = download_link
-        short_url = shorten_url(file_url)
-        
-        if short_url == file_url:
-            update.message.reply_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nThe URL shortening failed or was not needed. Do you want to post this link to the channel? (yes/no)')
-        else:
-            update.message.reply_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-        
+        update.message.reply_text(f'File uploaded successfully. Here is your download link: {download_link}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
 
 # Upload file to user's Telegram account
-def upload_file_to_user_telegram(file_url: str, user_chat_id: int, context: CallbackContext):
+def upload_file_to_user_telegram(file_url: str, user_chat_id: int):
     async def upload_file():
         await telethon_client.start()
         try:
             # Download the file
             file = await telethon_client.download_media(file_url)
-            if not file:
-                logging.error('Failed to download the file.')
-                context.bot.send_message(user_chat_id, 'Failed to download the file.')
-                return
             # Upload the file to user's Telegram cloud storage
             await telethon_client.send_file(user_chat_id, file)
             logging.info('File uploaded successfully to user\'s Telegram cloud storage.')
-            # Confirm success
-            context.bot.send_message(user_chat_id, 'File uploaded successfully. You can now process it.')
         except Exception as e:
             logging.error(f'Error uploading file: {e}')
-            context.bot.send_message(user_chat_id, 'Error uploading file. Please try again later.')
         finally:
             await telethon_client.disconnect()
 
@@ -140,6 +129,8 @@ def post_to_channel(file_name: str, file_opener_url: str):
 def ask_post_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
     
+    logging.info(f"User response: {user_response}")
+
     if user_response == 'yes':
         update.message.reply_text('Please provide the file name:')
         return ASK_FILE_NAME
@@ -155,7 +146,7 @@ def ask_file_name(update: Update, context: CallbackContext):
     short_url = context.user_data.get('short_url')
     download_link = context.user_data.get('download_link')
 
-    if short_url:
+    if short_url and download_link:
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
         file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
 
@@ -163,13 +154,24 @@ def ask_file_name(update: Update, context: CallbackContext):
         
         update.message.reply_text('File posted to channel successfully.')
     else:
-        update.message.reply_text('Failed to retrieve the shortened URL.')
+        update.message.reply_text('Failed to retrieve the shortened URL or download link.')
     
     return ConversationHandler.END
 
 # Add handlers to dispatcher
 dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
 dispatcher.add_handler(CommandHandler('start', start))
+
+# Add conversation handler
+conversation_handler = ConversationHandler(
+    entry_points=[MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
+    states={
+        ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
+        ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)]
+    },
+    fallbacks=[]
+)
+dispatcher.add_handler(conversation_handler)
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
