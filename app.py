@@ -2,14 +2,10 @@ import logging
 from flask import Flask, request, send_from_directory
 import os
 import requests
-from dotenv import load_dotenv
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import base64
 from telethon import TelegramClient
-
-# Load environment variables from .env file
-load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -34,8 +30,8 @@ bot = Bot(token=TELEGRAM_TOKEN)
 updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 dispatcher = updater.dispatcher
 
-# Initialize Telethon client
-telethon_client = TelegramClient('session_name', API_ID, API_HASH)
+# Initialize Telethon client with session file in /tmp
+telethon_client = TelegramClient('/tmp/session_name', API_ID, API_HASH)
 
 # Define states for conversation handler
 ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
