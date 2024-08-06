@@ -87,10 +87,10 @@ def handle_document(update: Update, context: CallbackContext):
     if file_size > 20 * 1024 * 1024:
         # Handle large files
         context.user_data['file_path'] = file_url
-        update.message.reply_text('File is too large. Uploading directly to your Telegram cloud storage. Please wait...')
+        update.message.reply_text('File is too large for direct processing. Uploading directly to your Telegram cloud storage. Please wait...')
         upload_file_to_user_telegram(file_url)
-        update.message.reply_text('File uploaded. You can access it in your Telegram cloud storage.')
-        return ConversationHandler.END
+        update.message.reply_text(f'File uploaded to your Telegram cloud storage. Access it [here]({file_url}).\n\nDo you want to shorten this link and post it to the channel? (yes/no)')
+        return ASK_POST_CONFIRMATION
     else:
         # Process smaller files
         context.user_data['file_path'] = file_url
