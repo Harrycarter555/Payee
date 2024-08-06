@@ -7,6 +7,10 @@ import base64
 import logging
 from urllib.parse import quote
 from telethon import TelegramClient
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
 
