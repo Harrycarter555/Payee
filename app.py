@@ -5,13 +5,12 @@ from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import base64
 import logging
-from urllib.parse import quote
-from telethon import TelegramClient
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
+# Initialize Flask app
 app = Flask(__name__)
 
 # Load configuration from environment variables
@@ -20,10 +19,22 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
-API_ID = os.getenv('API_ID')  # API ID for telethon
-API_HASH = os.getenv('API_HASH')  # API Hash for telethon
+API_ID = os.getenv('API_ID')  # API ID for Telethon
+API_HASH = os.getenv('API_HASH')  # API Hash for Telethon
 USER_ID = os.getenv('USER_ID')  # User's Telegram ID
 
+# Log environment variables for debugging
+logging.basicConfig(level=logging.DEBUG)
+logging.debug(f"TELEGRAM_TOKEN: {TELEGRAM_TOKEN}")
+logging.debug(f"WEBHOOK_URL: {WEBHOOK_URL}")
+logging.debug(f"URL_SHORTENER_API_KEY: {URL_SHORTENER_API_KEY}")
+logging.debug(f"CHANNEL_ID: {CHANNEL_ID}")
+logging.debug(f"FILE_OPENER_BOT_USERNAME: {FILE_OPENER_BOT_USERNAME}")
+logging.debug(f"API_ID: {API_ID}")
+logging.debug(f"API_HASH: {API_HASH}")
+logging.debug(f"USER_ID: {USER_ID}")
+
+# Check for missing environment variables
 if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME or not API_ID or not API_HASH or not USER_ID:
     raise ValueError("One or more environment variables are not set.")
 
@@ -31,9 +42,6 @@ if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHA
 bot = Bot(token=TELEGRAM_TOKEN)
 updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 dispatcher = updater.dispatcher
-
-# Initialize Telethon client
-telethon_client = TelegramClient('session_name', API_ID, API_HASH)
 
 # Define states for conversation handler
 ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
@@ -106,17 +114,18 @@ def handle_document(update: Update, context: CallbackContext):
 
 # Upload file to user's Telegram account
 def upload_file_to_user_telegram(file_url: str):
+    from telethon import TelegramClient
+    
     async def upload_file():
-        await telethon_client.start()
-        try:
-            await telethon_client.send_file(USER_ID, file_url)
-            print('File uploaded successfully to user\'s Telegram cloud storage.')
-        except Exception as e:
-            print(f'Error uploading file: {e}')
-        await telethon_client.disconnect()
+        async with TelegramClient('session_name', API_ID, API_HASH) as client:
+            try:
+                await client.send_file(USER_ID, file_url)
+                print('File uploaded successfully to user\'s Telegram cloud storage.')
+            except Exception as e:
+                print(f'Error uploading file: {e}')
 
-    with telethon_client:
-        telethon_client.loop.run_until_complete(upload_file())
+    import asyncio
+    asyncio.run(upload_file())
 
 # Post the shortened URL to the channel
 def post_to_channel(file_name: str, file_opener_url: str):
