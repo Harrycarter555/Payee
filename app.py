@@ -104,17 +104,13 @@ def handle_document(update: Update, context: CallbackContext):
 async def upload_large_file(file_url: str, message):
     try:
         await telethon_client.start()
-        
+
         # Download the file
         file_path = os.path.basename(file_url)
         start_time = time.time()
-        
-        # Placeholder for tracking download progress
-        async for progress in telethon_client.download_media(file_url, file_name=file_path, progress_callback=progress_callback):
-            elapsed_time = time.time() - start_time
-            estimated_time = (elapsed_time / progress['total']) * (progress['total'] - progress['current'])
-            remaining_time = int(estimated_time)
-            await message.reply_text(f'Uploading file... Remaining time: {remaining_time} seconds')
+
+        # Download the file using Telethon
+        await telethon_client.download_media(file_url, file_name=file_path)
 
         # Upload the file to user's Telegram cloud storage
         await telethon_client.send_file(USER_ID, file=file_path, caption='Here is your file.')
@@ -122,7 +118,7 @@ async def upload_large_file(file_url: str, message):
         # Notify user
         await telethon_client.send_message(USER_ID, 'File uploaded successfully. You can check your storage.')
 
-        # Get the file's download link (For demonstration purposes, you might need to implement a different way to get the URL)
+        # Get the file's download link
         file_message = await telethon_client.get_messages(USER_ID, limit=1)
         file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_message[0].document.file_name}'
 
@@ -135,22 +131,6 @@ async def upload_large_file(file_url: str, message):
 
     finally:
         await telethon_client.disconnect()
-
-# Define the progress callback
-async def progress_callback(current: int, total: int):
-    if total > 0:
-        progress = {
-            'current': current,
-            'total': total
-        }
-        # Placeholder to handle progress update
-        pass
-
-# Post the shortened URL to the channel
-def post_to_channel(file_name: str, file_opener_url: str):
-    message = (f'File Name: {file_name}\n'
-               f'Access the file using this link: {file_opener_url}')
-    bot.send_message(chat_id=CHANNEL_ID, text=message)
 
 # Define handlers for conversation
 def ask_post_confirmation(update: Update, context: CallbackContext):
@@ -181,6 +161,12 @@ def ask_file_name(update: Update, context: CallbackContext):
         update.message.reply_text('Failed to retrieve the shortened URL.')
     
     return ConversationHandler.END
+
+# Post the shortened URL to the channel
+def post_to_channel(file_name: str, file_opener_url: str):
+    message = (f'File Name: {file_name}\n'
+               f'Access the file using this link: {file_opener_url}')
+    bot.send_message(chat_id=CHANNEL_ID, text=message)
 
 # Add handlers to dispatcher
 dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
@@ -221,5 +207,5 @@ def favicon():
 
 # Run the app
 if __name__ == '__main__':
-    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 80)))
+    app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # Set max file size to 25MB
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
