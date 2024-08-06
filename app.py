@@ -2,6 +2,7 @@ import logging
 import os
 import asyncio
 import base64
+import time
 from flask import Flask, request, send_from_directory
 import requests
 from telegram import Bot, Update
@@ -89,7 +90,7 @@ def handle_document(update: Update, context: CallbackContext):
         # Handle large files
         context.user_data['file_url'] = file_url
         update.message.reply_text('File is too large for direct processing. Uploading directly to your Telegram cloud storage. Please wait...')
-        asyncio.run(upload_large_file(file_url))
+        asyncio.create_task(upload_large_file(file_url, update.message))
         return ASK_POST_CONFIRMATION
     else:
         # Process smaller files
@@ -100,19 +101,30 @@ def handle_document(update: Update, context: CallbackContext):
         return ASK_POST_CONFIRMATION
 
 # Upload large file to user's Telegram cloud storage
-async def upload_large_file(file_url: str):
+async def upload_large_file(file_url: str, message):
     try:
         await telethon_client.start()
         
         # Download the file
-        file_path = await telethon_client.download_media(file_url, file_name=os.path.basename(file_url))
+        file_path = os.path.basename(file_url)
+        start_time = time.time()
         
+        # Placeholder for tracking download progress
+        async for progress in telethon_client.download_media(file_url, file_name=file_path, progress_callback=progress_callback):
+            elapsed_time = time.time() - start_time
+            estimated_time = (elapsed_time / progress['total']) * (progress['total'] - progress['current'])
+            remaining_time = int(estimated_time)
+            await message.reply_text(f'Uploading file... Remaining time: {remaining_time} seconds')
+
         # Upload the file to user's Telegram cloud storage
         await telethon_client.send_file(USER_ID, file=file_path, caption='Here is your file.')
 
-        # Get the file's download link
-        message = await telethon_client.get_messages(USER_ID, limit=1)
-        file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{message[0].document.file_name}'
+        # Notify user
+        await telethon_client.send_message(USER_ID, 'File uploaded successfully. You can check your storage.')
+
+        # Get the file's download link (For demonstration purposes, you might need to implement a different way to get the URL)
+        file_message = await telethon_client.get_messages(USER_ID, limit=1)
+        file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_message[0].document.file_name}'
 
         # Send confirmation to the user
         await telethon_client.send_message(USER_ID, f'File uploaded successfully. Here is your download link: {file_url}')
@@ -123,6 +135,16 @@ async def upload_large_file(file_url: str):
 
     finally:
         await telethon_client.disconnect()
+
+# Define the progress callback
+async def progress_callback(current: int, total: int):
+    if total > 0:
+        progress = {
+            'current': current,
+            'total': total
+        }
+        # Placeholder to handle progress update
+        pass
 
 # Post the shortened URL to the channel
 def post_to_channel(file_name: str, file_opener_url: str):
