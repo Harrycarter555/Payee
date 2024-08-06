@@ -1,16 +1,16 @@
+import logging
 from flask import Flask, request, send_from_directory
 import os
 import requests
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 import base64
-import logging
+from telethon import TelegramClient
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Initialize Flask app
 app = Flask(__name__)
 
 # Load configuration from environment variables
@@ -19,29 +19,21 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
-API_ID = os.getenv('API_ID')  # API ID for Telethon
-API_HASH = os.getenv('API_HASH')  # API Hash for Telethon
-USER_ID = os.getenv('USER_ID')  # User's Telegram ID
+API_ID = os.getenv('API_ID')
+API_HASH = os.getenv('API_HASH')
+USER_ID = os.getenv('USER_ID')
 
-# Log environment variables for debugging
-logging.basicConfig(level=logging.DEBUG)
-logging.debug(f"TELEGRAM_TOKEN: {TELEGRAM_TOKEN}")
-logging.debug(f"WEBHOOK_URL: {WEBHOOK_URL}")
-logging.debug(f"URL_SHORTENER_API_KEY: {URL_SHORTENER_API_KEY}")
-logging.debug(f"CHANNEL_ID: {CHANNEL_ID}")
-logging.debug(f"FILE_OPENER_BOT_USERNAME: {FILE_OPENER_BOT_USERNAME}")
-logging.debug(f"API_ID: {API_ID}")
-logging.debug(f"API_HASH: {API_HASH}")
-logging.debug(f"USER_ID: {USER_ID}")
-
-# Check for missing environment variables
-if not TELEGRAM_TOKEN or not WEBHOOK_URL or not URL_SHORTENER_API_KEY or not CHANNEL_ID or not FILE_OPENER_BOT_USERNAME or not API_ID or not API_HASH or not USER_ID:
-    raise ValueError("One or more environment variables are not set.")
+if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME, API_ID, API_HASH, USER_ID]):
+    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'URL_SHORTENER_API_KEY', 'CHANNEL_ID', 'FILE_OPENER_BOT_USERNAME', 'API_ID', 'API_HASH', 'USER_ID'] if not os.getenv(var)]
+    raise ValueError(f"Environment variables missing: {', '.join(missing_vars)}")
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
 updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 dispatcher = updater.dispatcher
+
+# Initialize Telethon client
+telethon_client = TelegramClient('session_name', API_ID, API_HASH)
 
 # Define states for conversation handler
 ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
@@ -49,12 +41,12 @@ ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
     api_token = URL_SHORTENER_API_KEY
-    encoded_url = requests.utils.quote(long_url)  # URL encode the long URL
+    encoded_url = requests.utils.quote(long_url)
     api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
 
     try:
         response = requests.get(api_url)
-        response.raise_for_status()  # Raise an exception for HTTP errors
+        response.raise_for_status()
         
         response_data = response.json()
         if response_data.get("status") == "success":
@@ -75,11 +67,9 @@ def start(update: Update, context: CallbackContext):
             decoded_url = base64.b64decode(encoded_url).decode('utf-8')
             logging.info(f"Decoded URL: {decoded_url}")
 
-            # Shorten the decoded URL
             shortened_link = shorten_url(decoded_url)
             logging.info(f"Shortened URL: {shortened_link}")
 
-            # Provide information or further processing
             update.message.reply_text(f'Here is your shortened link: {shortened_link}')
         else:
             update.message.reply_text('Welcome! Please use the link provided in the channel.')
@@ -95,18 +85,13 @@ def handle_document(update: Update, context: CallbackContext):
     file_url = file.file_path
     file_size = update.message.document.file_size
 
-    if file_size > 20 * 1024 * 1024:  # File larger than 20 MB
-        # Handle large file upload with Telethon
+    if file_size > 20 * 1024 * 1024:
         context.user_data['file_path'] = file_url
         update.message.reply_text('File is too large. Uploading directly to your Telegram cloud storage. Please wait...')
-        # Start the file upload process
         upload_file_to_user_telegram(file_url)
         return ConversationHandler.END
     else:
-        # Process URL shortening
         short_url = shorten_url(file_url)
-        
-        # Ask if user wants to post the shortened URL
         update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
         
         context.user_data['short_url'] = short_url
@@ -114,18 +99,17 @@ def handle_document(update: Update, context: CallbackContext):
 
 # Upload file to user's Telegram account
 def upload_file_to_user_telegram(file_url: str):
-    from telethon import TelegramClient
-    
     async def upload_file():
-        async with TelegramClient('session_name', API_ID, API_HASH) as client:
-            try:
-                await client.send_file(USER_ID, file_url)
-                print('File uploaded successfully to user\'s Telegram cloud storage.')
-            except Exception as e:
-                print(f'Error uploading file: {e}')
+        await telethon_client.start()
+        try:
+            await telethon_client.send_file(USER_ID, file_url)
+            print('File uploaded successfully to user\'s Telegram cloud storage.')
+        except Exception as e:
+            print(f'Error uploading file: {e}')
+        await telethon_client.disconnect()
 
-    import asyncio
-    asyncio.run(upload_file())
+    with telethon_client:
+        telethon_client.loop.run_until_complete(upload_file())
 
 # Post the shortened URL to the channel
 def post_to_channel(file_name: str, file_opener_url: str):
@@ -152,13 +136,9 @@ def ask_file_name(update: Update, context: CallbackContext):
     short_url = context.user_data.get('short_url')
 
     if short_url:
-        # Encode the short URL in Base64
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
-        
-        # Create the file opener URL
         file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
 
-        # Post the shortened URL to the channel
         post_to_channel(file_name, file_opener_url)
         
         update.message.reply_text('File posted to channel successfully.')
@@ -205,5 +185,5 @@ def favicon():
     return send_from_directory('static', 'favicon.ico')
 
 if __name__ == '__main__':
-    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB
+    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
     app.run(port=5000)
