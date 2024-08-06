@@ -1,13 +1,13 @@
 import logging
 import os
 import asyncio
+import base64
 from flask import Flask, request, send_from_directory
 import requests
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
-from telethon.tl.types import DocumentAttributeFilename
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -89,7 +89,7 @@ def handle_document(update: Update, context: CallbackContext):
         # Handle large files
         context.user_data['file_url'] = file_url
         update.message.reply_text('File is too large for direct processing. Uploading directly to your Telegram cloud storage. Please wait...')
-        asyncio.run(upload_large_file(file_url, update.message.chat_id))
+        asyncio.run(upload_large_file(file_url))
         return ASK_POST_CONFIRMATION
     else:
         # Process smaller files
@@ -100,7 +100,7 @@ def handle_document(update: Update, context: CallbackContext):
         return ASK_POST_CONFIRMATION
 
 # Upload large file to user's Telegram cloud storage
-async def upload_large_file(file_url: str, user_chat_id: int):
+async def upload_large_file(file_url: str):
     try:
         await telethon_client.start()
         
@@ -108,18 +108,18 @@ async def upload_large_file(file_url: str, user_chat_id: int):
         file_path = await telethon_client.download_media(file_url, file_name=os.path.basename(file_url))
         
         # Upload the file to user's Telegram cloud storage
-        await telethon_client.send_file(user_chat_id, file=file_path, caption='Here is your file.')
+        await telethon_client.send_file(USER_ID, file=file_path, caption='Here is your file.')
 
         # Get the file's download link
-        message = await telethon_client.get_messages(user_chat_id, limit=1)
+        message = await telethon_client.get_messages(USER_ID, limit=1)
         file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{message[0].document.file_name}'
 
         # Send confirmation to the user
-        await telethon_client.send_message(user_chat_id, f'File uploaded successfully. Here is your download link: {file_url}')
+        await telethon_client.send_message(USER_ID, f'File uploaded successfully. Here is your download link: {file_url}')
     
     except Exception as e:
         logging.error(f'Error uploading file: {e}')
-        await telethon_client.send_message(user_chat_id, 'Error uploading file.')
+        await telethon_client.send_message(USER_ID, 'Error uploading file.')
 
     finally:
         await telethon_client.disconnect()
