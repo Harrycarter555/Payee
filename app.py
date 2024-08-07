@@ -6,6 +6,7 @@ from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 from dotenv import load_dotenv
+from pyrogram import Client
 
 # Load environment variables from .env file
 load_dotenv()
@@ -25,16 +26,21 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
+API_ID = os.getenv('API_ID')
+API_HASH = os.getenv('API_HASH')
 
 # Check for missing environment variables
-if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME]):
-    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'URL_SHORTENER_API_KEY', 'CHANNEL_ID', 'FILE_OPENER_BOT_USERNAME'] if not os.getenv(var)]
+if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME, API_ID, API_HASH]):
+    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'URL_SHORTENER_API_KEY', 'CHANNEL_ID', 'FILE_OPENER_BOT_USERNAME', 'API_ID', 'API_HASH'] if not os.getenv(var)]
     raise ValueError(f"Environment variables missing: {', '.join(missing_vars)}")
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
 updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 dispatcher = updater.dispatcher
+
+# Initialize Pyrogram client
+pyrogram_client = Client("my_bot", api_id=API_ID, api_hash=API_HASH)
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
@@ -45,7 +51,7 @@ def shorten_url(long_url: str) -> str:
     try:
         response = requests.get(api_url)
         response.raise_for_status()
-        
+
         response_data = response.json()
         if response_data.get("status") == "success":
             short_url = response_data.get("shortenedUrl", "")
@@ -104,7 +110,7 @@ def handle_forwarded_document(update: Update, context: CallbackContext):
 # Define handlers for conversation
 def ask_post_confirmation(update: Update, context: CallbackContext):
     user_response = update.message.text.lower()
-    
+
     if user_response == 'yes':
         update.message.reply_text('Please provide the file name:')
         return ASK_FILE_NAME
@@ -124,18 +130,19 @@ def ask_file_name(update: Update, context: CallbackContext):
         file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&{file_name}'
 
         post_to_channel(file_name, file_opener_url)
-        
+
         update.message.reply_text('File posted to channel successfully.')
     else:
         update.message.reply_text('Failed to retrieve the shortened URL.')
-    
+
     return ConversationHandler.END
 
-# Post the shortened URL to the channel
+# Post the shortened URL to the channel using Pyrogram
 def post_to_channel(file_name: str, file_opener_url: str):
     message = (f'File Name: {file_name}\n'
                f'Access the file using this link: {file_opener_url}')
-    bot.send_message(chat_id=CHANNEL_ID, text=message)
+    with pyrogram_client:
+        pyrogram_client.send_message(chat_id=CHANNEL_ID, text=message)
 
 # Add handlers to dispatcher
 dispatcher.add_handler(MessageHandler(Filters.document & Filters.forwarded, handle_forwarded_document))
