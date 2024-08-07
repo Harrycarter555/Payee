@@ -19,14 +19,13 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 API_ID = os.getenv('API_ID')  # Your API ID
 API_HASH = os.getenv('API_HASH')  # Your API Hash
 
 # Check for missing environment variables
-if not all([TELEGRAM_TOKEN, WEBHOOK_URL, CHANNEL_ID, API_ID, API_HASH]):
-    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'CHANNEL_ID', 'API_ID', 'API_HASH'] if not os.getenv(var)]
+if not all([TELEGRAM_TOKEN, CHANNEL_ID, API_ID, API_HASH]):
+    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'CHANNEL_ID', 'API_ID', 'API_HASH'] if not os.getenv(var)]
     raise ValueError(f"Environment variables missing: {', '.join(missing_vars)}")
 
 # Initialize Pyrogram Client
@@ -63,13 +62,7 @@ async def handle_forwarded_document(client, message: Message):
 # Webhook route
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    try:
-        update = request.get_json(force=True)
-        pyrogram_client.process_update(update)
-        return 'ok', 200
-    except Exception as e:
-        logging.error(f'Error processing update: {e}', exc_info=True)
-        return 'error', 500
+    return 'ok', 200
 
 # Home route
 @app.route('/')
@@ -79,21 +72,14 @@ def home():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    response = requests.post(
-        f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-        data={'url': WEBHOOK_URL}
-    )
-    if response.json().get('ok'):
-        return "Webhook setup ok"
-    else:
-        return "Webhook setup failed"
+    return "Webhook setup is not required for Pyrogram polling", 200
 
 # Favicon route
 @app.route('/favicon.ico')
 def favicon():
     return send_from_directory('static', 'favicon.ico')
 
-# Run the app
+# Run the Flask app and Pyrogram client
 if __name__ == '__main__':
     pyrogram_client.start()
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
