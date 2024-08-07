@@ -4,6 +4,7 @@ from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters
 from dotenv import load_dotenv
+import base64
 
 # Load environment variables from .env file
 load_dotenv()
@@ -20,11 +21,11 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
-CHANNEL_ID = os.getenv('CHANNEL_ID')  # Channel or Group ID where file will be shared
+FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
 
 # Check for missing environment variables
-if not all([TELEGRAM_TOKEN, WEBHOOK_URL, CHANNEL_ID]):
-    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'CHANNEL_ID'] if not os.getenv(var)]
+if not all([TELEGRAM_TOKEN, WEBHOOK_URL, FILE_OPENER_BOT_USERNAME]):
+    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'FILE_OPENER_BOT_USERNAME'] if not os.getenv(var)]
     raise ValueError(f"Environment variables missing: {', '.join(missing_vars)}")
 
 # Initialize Telegram bot
@@ -43,10 +44,12 @@ def handle_file_upload(update: Update, context: CallbackContext):
         file_id = update.message.document.file_id
         file_name = update.message.document.file_name
 
-        # Forward the file to the specified channel or group
-        bot.send_document(chat_id=CHANNEL_ID, document=file_id, caption=f'File Name: {file_name}')
-        
-        update.message.reply_text('File has been shared successfully in the channel/group.')
+        # Create the file opener URL
+        short_url_encoded = base64.b64encode(file_id.encode('utf-8')).decode('utf-8')
+        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&{file_name}'
+
+        # Send the file opener URL to the user
+        update.message.reply_text(f'File has been processed successfully! Here is your file opener URL: {file_opener_url}')
     except Exception as e:
         logging.error(f"Error handling file upload: {e}", exc_info=True)
         update.message.reply_text('An error occurred while processing the file. Please try again later.')
