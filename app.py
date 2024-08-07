@@ -137,8 +137,7 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
-    file_path = context.user_data.get('file_path')
-
+    
     if short_url:
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
         file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
@@ -155,6 +154,7 @@ def ask_file_name(update: Update, context: CallbackContext):
 def handle_url(update: Update, context: CallbackContext):
     url = update.message.text
     if requests.utils.urlparse(url).scheme in ["http", "https"]:
+        processing_message = update.message.reply_text('Processing your URL, please wait...')
         shortened_link = shorten_url(url)
         update.message.reply_text(f'Here is your shortened link: {shortened_link}\n\nDo you want to post this link to the channel? (yes/no)')
         context.user_data['short_url'] = shortened_link
