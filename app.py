@@ -64,23 +64,7 @@ def shorten_url(long_url: str) -> str:
 
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
-    try:
-        if context.args:
-            encoded_url = context.args[0]
-            decoded_url = base64.b64decode(encoded_url).decode('utf-8')
-            logging.info(f"Decoded URL: {decoded_url}")
-
-            shortened_link = shorten_url(decoded_url)
-            logging.info(f"Shortened URL: {shortened_link}")
-
-            update.message.reply_text(f'Here is your shortened link: {shortened_link}\nDo you want to post this link to the channel? (yes/no)')
-            context.user_data['short_url'] = shortened_link
-            return ASK_POST_CONFIRMATION
-        else:
-            update.message.reply_text('Please upload a file or send a URL to shorten.')
-    except Exception as e:
-        logging.error(f"Error handling /start command: {e}")
-        update.message.reply_text('An error occurred. Please try again later.')
+    update.message.reply_text('Please upload a file or send a URL to Post.')
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
@@ -102,9 +86,10 @@ def handle_document(update: Update, context: CallbackContext):
     else:
         short_url = shorten_url(file_url)
         if short_url:
-            # Notify user with the shortened URL
+            # Notify user with the file path and shortened URL
             update.message.reply_text(
                 f'File uploaded successfully.\n'
+                f'File path: {file_url}\n'
                 f'Here is your shortened link: {short_url}\n\n'
                 'Do you want to post this link to the channel? (yes/no)'
             )
@@ -152,6 +137,7 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
+    file_path = context.user_data.get('file_path')
 
     if short_url:
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
@@ -159,31 +145,26 @@ def ask_file_name(update: Update, context: CallbackContext):
 
         post_to_channel(file_name, file_opener_url)
         
-        update.message.reply_text(f'File posted to channel successfully.')
+        update.message.reply_text('File posted to channel successfully.')
     else:
         update.message.reply_text('Failed to retrieve the shortened URL.')
     
     return ConversationHandler.END
 
-# Handle incoming URL after /post command
-def handle_incoming_url(update: Update, context: CallbackContext):
-    try:
-        url = update.message.text
-        logging.info(f"Received URL for processing: {url}")
-
-        # Shorten the URL and process it
+# Define the handler for URL
+def handle_url(update: Update, context: CallbackContext):
+    url = update.message.text
+    if requests.utils.urlparse(url).scheme in ["http", "https"]:
         shortened_link = shorten_url(url)
+        update.message.reply_text(f'Here is your shortened link: {shortened_link}\n\nDo you want to post this link to the channel? (yes/no)')
         context.user_data['short_url'] = shortened_link
-        update.message.reply_text(f'Here is your shortened link: {shortened_link}\nDo you want to post this link to the channel? (yes/no)')
         return ASK_POST_CONFIRMATION
-    except Exception as e:
-        logging.error(f"Error processing incoming URL: {e}")
-        update.message.reply_text('An error occurred. Please try again later.')
-        return ConversationHandler.END
+    else:
+        update.message.reply_text('Please provide a valid URL.')
 
 # Add handlers to dispatcher
 conv_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.document, handle_document), CommandHandler('post', handle_incoming_url)],
+    entry_points=[MessageHandler(Filters.document | Filters.text & ~Filters.command, handle_document), MessageHandler(Filters.text & ~Filters.command, handle_url)],
     states={
         ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
         ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
@@ -230,5 +211,4 @@ def favicon():
 # Run the app
 if __name__ == '__main__':
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
-    # Continue the Flask app run configuration
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 80)), debug=True)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 80)))
