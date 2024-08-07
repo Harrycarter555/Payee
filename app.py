@@ -46,7 +46,7 @@ def handle_file_upload(update: Update, context: CallbackContext):
 
         # Create the file opener URL
         short_url_encoded = base64.b64encode(file_id.encode('utf-8')).decode('utf-8')
-        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&{file_name}'
+        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
 
         # Send the file opener URL to the user
         update.message.reply_text(f'File has been processed successfully! Here is your file opener URL: {file_opener_url}')
