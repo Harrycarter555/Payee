@@ -41,8 +41,10 @@ def handle_file_upload(update: Update, context: CallbackContext):
         file = update.message.document.get_file()
         file_url = file.file_path
 
-        # Provide the download link to the user
-        update.message.reply_text(f'File uploaded successfully! Here is your download link: {file_url}')
+        # Provide the streaming link to the user
+        # Note: Telegram file_path is not a direct streaming link, but it can be used for direct file access.
+        streaming_link = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_url.replace('/file/bot', '')}"
+        update.message.reply_text(f'File uploaded successfully! Here is your streaming link: {streaming_link}')
     except Exception as e:
         logging.error(f"Error handling file upload: {e}", exc_info=True)
         update.message.reply_text('An error occurred while processing the file. Please try again later.')
