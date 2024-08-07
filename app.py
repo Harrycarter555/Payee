@@ -1,10 +1,8 @@
 import logging
 import os
-import asyncio
 import base64
-import time
-from flask import Flask, request, send_from_directory
 import requests
+from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 from telethon import TelegramClient
@@ -73,15 +71,15 @@ def shorten_url(long_url: str) -> str:
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
     try:
-        update.message.reply_text('Please upload your file.')
+        update.message.reply_text(
+            'Please upload your file directly to your Telegram cloud storage and then provide the file URL here.\n'
+            'You can upload your file by sending it to your own Telegram chat.')
     except Exception as e:
         logging.error(f"Error handling /start command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
-    processing_message = update.message.reply_text('Processing your file, please wait...')
-    
     file = update.message.document.get_file()
     file_url = file.file_path
     file_size = update.message.document.file_size
@@ -89,8 +87,7 @@ def handle_document(update: Update, context: CallbackContext):
     if file_size > 20 * 1024 * 1024:
         # Handle large files
         context.user_data['file_url'] = file_url
-        update.message.reply_text('File is too large for direct processing. Uploading directly to your Telegram cloud storage. Please wait...')
-        asyncio.ensure_future(upload_large_file(file_url, update.message))  # Use ensure_future for proper async handling
+        update.message.reply_text('File is too large for direct processing. Please upload it directly to your Telegram cloud storage and provide the file URL here.')
         return ASK_POST_CONFIRMATION
     else:
         # Process smaller files
@@ -99,44 +96,6 @@ def handle_document(update: Update, context: CallbackContext):
         update.message.reply_text(f'File uploaded successfully. Here is your download link: {file_url}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
-
-# Upload large file to user's Telegram cloud storage
-async def upload_large_file(file_url: str, message):
-    try:
-        await telethon_client.start()
-
-        # Download the file
-        file_path = os.path.basename(file_url)
-        start_time = time.time()
-        logging.info(f"Starting download for file: {file_url}")
-
-        # Download the file using Telethon
-        await telethon_client.download_media(file_url, file_name=file_path)
-        download_time = time.time() - start_time
-        logging.info(f"Download completed in {download_time} seconds")
-
-        # Upload the file to user's Telegram cloud storage
-        logging.info(f"Uploading file to user storage")
-        await telethon_client.send_file(USER_ID, file=file_path, caption='Here is your file.')
-
-        # Notify user
-        logging.info(f"Sending notification to user")
-        await telethon_client.send_message(USER_ID, 'File uploaded successfully. You can check your storage.')
-
-        # Get the file's download link
-        logging.info(f"Getting file download link")
-        file_message = await telethon_client.get_messages(USER_ID, limit=1)
-        file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_message[0].document.file_name}'
-
-        # Send confirmation to the user
-        await telethon_client.send_message(USER_ID, f'File uploaded successfully. Here is your download link: {file_url}')
-    
-    except Exception as e:
-        logging.error(f'Error uploading file: {e}')
-        await telethon_client.send_message(USER_ID, 'Error uploading file.')
-
-    finally:
-        await telethon_client.disconnect()
 
 # Define handlers for conversation
 def ask_post_confirmation(update: Update, context: CallbackContext):
