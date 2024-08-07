@@ -1,9 +1,11 @@
 import os
 import asyncio
+from dotenv import load_dotenv
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Configs
+load_dotenv()
 API_HASH = os.environ['API_HASH']
 APP_ID = int(os.environ['APP_ID'])
 BOT_TOKEN = os.environ['BOT_TOKEN']
