@@ -1,6 +1,5 @@
 import logging
 import os
-import requests
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters
@@ -47,8 +46,11 @@ def handle_forwarded_document(update: Update, context: CallbackContext):
     try:
         if update.message.forward_from_chat and update.message.forward_from_chat.id == int(CHANNEL_ID):
             file = update.message.document.get_file()
-            file_url = file.file_path
-
+            file_id = update.message.document.file_id
+            
+            # Generate the file URL from the file_id
+            file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file.file_path}'
+            
             # Provide the download link to the user
             update.message.reply_text(f'Here is your download link: {file_url}')
         else:
