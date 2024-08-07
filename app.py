@@ -102,7 +102,8 @@ def handle_document(update: Update, context: CallbackContext):
         if short_url:
             update.message.reply_text(
                 f'File uploaded successfully.\n'
-                f'Here is your short link: {short_url}\n\n'
+                f'File path: {file_url}\n'
+                f'Here is your shortened link: {short_url}\n\n'
                 'Do you want to post this link to the channel? (yes/no)'
             )
             context.user_data['short_url'] = short_url
@@ -148,6 +149,7 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
+    file_path = context.user_data.get('file_path')
 
     if short_url:
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
@@ -170,7 +172,7 @@ def handle_text_message(update: Update, context: CallbackContext):
         context.user_data['short_url'] = short_url
         return ASK_POST_CONFIRMATION
     else:
-        update.message.reply_text('Please send a valid URL.')
+        update.message.reply_text('Please provide a URL.')
 
 # Add handlers to dispatcher
 conv_handler = ConversationHandler(
