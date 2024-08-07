@@ -70,14 +70,19 @@ def start(update: Update, context: CallbackContext):
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
     file = update.message.document.get_file()
+    file_id = update.message.document.file_id
     file_url = file.file_path
-
-    # Process the file URL
-    context.user_data['file_url'] = file_url
-    short_url = shorten_url(file_url)
-    update.message.reply_text(f'File uploaded successfully. Here is your download link: {file_url}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-    context.user_data['short_url'] = short_url
-    return ASK_POST_CONFIRMATION
+    
+    # Generate the file URL directly
+    if file_url:
+        context.user_data['file_url'] = file_url
+        short_url = shorten_url(file_url)
+        update.message.reply_text(f'File uploaded successfully. Here is your download link: {file_url}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        context.user_data['short_url'] = short_url
+        return ASK_POST_CONFIRMATION
+    else:
+        update.message.reply_text('Failed to retrieve file URL. Please try again.')
+        return ConversationHandler.END
 
 # Define handlers for conversation
 def ask_post_confirmation(update: Update, context: CallbackContext):
