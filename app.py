@@ -88,17 +88,31 @@ def handle_document(update: Update, context: CallbackContext):
     file_url = file.file_path
     file_size = update.message.document.file_size
 
+    # Ensure that file_path is saved
+    context.user_data['file_path'] = file_url
+
+    logging.info(f"Received file with URL: {file_url} and size: {file_size}")
+
     if file_size > 20 * 1024 * 1024:
-        context.user_data['file_path'] = file_url
         update.message.reply_text('File is too large. Uploading directly to your Telegram cloud storage. Please wait...')
         upload_file_to_user_telegram(file_url)
         return ConversationHandler.END
     else:
         short_url = shorten_url(file_url)
-        update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-        
-        context.user_data['short_url'] = short_url
-        return ASK_POST_CONFIRMATION
+        if short_url:
+            # Notify user with the file path and shortened URL
+            update.message.reply_text(
+                f'File uploaded successfully.\n'
+                f'File path: {file_url}\n'
+                f'Here is your short link: {short_url}\n\n'
+                'Do you want to post this link to the channel? (yes/no)'
+            )
+            context.user_data['short_url'] = short_url
+            return ASK_POST_CONFIRMATION
+        else:
+            # Handle case where URL shortening fails
+            update.message.reply_text('Failed to shorten the URL. Please try again later.')
+            return ConversationHandler.END
 
 # Upload file to user's Telegram account
 def upload_file_to_user_telegram(file_url: str):
@@ -137,6 +151,7 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
+    file_path = context.user_data.get('file_path')
 
     if short_url:
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
@@ -144,27 +159,24 @@ def ask_file_name(update: Update, context: CallbackContext):
 
         post_to_channel(file_name, file_opener_url)
         
-        update.message.reply_text('File posted to channel successfully.')
+        update.message.reply_text(f'File posted to channel successfully.\nFile Path: {file_path}')
     else:
         update.message.reply_text('Failed to retrieve the shortened URL.')
     
     return ConversationHandler.END
 
-# Handler for text messages containing URLs
-def handle_text_message(update: Update, context: CallbackContext):
-    text = update.message.text
-    if 'http' in text:  # Simple check for URL
-        short_url = shorten_url(text)
-        update.message.reply_text(f'Here is your shortened link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-        context.user_data['short_url'] = short_url
-        return ASK_POST_CONFIRMATION
-    else:
-        update.message.reply_text('Please send a valid URL.')
-
 # Add handlers to dispatcher
-dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
+conv_handler = ConversationHandler(
+    entry_points=[MessageHandler(Filters.document, handle_document)],
+    states={
+        ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
+        ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
+    },
+    fallbacks=[]
+)
+
+dispatcher.add_handler(conv_handler)
 dispatcher.add_handler(CommandHandler('start', start))
-dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text_message))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
