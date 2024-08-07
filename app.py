@@ -1,10 +1,10 @@
 import os
-import time
 import asyncio
 from dotenv import load_dotenv
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.errors import FloodWait
+from aiohttp import web
 
 # Load environment variables from .env file
 load_dotenv()
@@ -38,7 +38,7 @@ async def start_bot():
                 await xbot.run()
         except FloodWait as e:
             print(f"Rate limit exceeded. Waiting for {e.x} seconds.")
-            time.sleep(e.x)  # Wait for the specified time before retrying
+            await asyncio.sleep(e.x)  # Wait for the specified time before retrying
         except Exception as e:
             print(f"An error occurred: {e}")
             break
@@ -170,11 +170,11 @@ async def _main(bot, update):
     copied = await update.copy(TRACK_CHANNEL)
     await __reply(update, copied)
 
-# Handler function for Vercel
+# Vercel Handler
 async def handler(request):
     if request.method == 'GET':
-        return 'Hello, world!'
-    return 'Method not allowed', 405
+        return web.Response(text='Hello, world!')
+    return web.Response(text='Method not allowed', status=405)
 
 # Run the bot
 if __name__ == "__main__":
