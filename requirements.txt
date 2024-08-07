@@ -7,3 +7,4 @@ urllib3==1.26.19
 pyrogram
 tgcrypto
 aiohttp
+http.server
