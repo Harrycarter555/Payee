@@ -1,12 +1,10 @@
 import logging
 import os
-from flask import Flask, request, send_from_directory
+import base64
 import requests
+from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
-import base64
-from telethon import TelegramClient
-from telethon.sessions import MemorySession
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -15,31 +13,28 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 
+# Enable Flask debugging
+app.debug = True
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
-API_ID = os.getenv('API_ID')
-API_HASH = os.getenv('API_HASH')
-USER_ID = os.getenv('USER_ID')
 
 # Check for missing environment variables
-if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME, API_ID, API_HASH, USER_ID]):
-    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'URL_SHORTENER_API_KEY', 'CHANNEL_ID', 'FILE_OPENER_BOT_USERNAME', 'API_ID', 'API_HASH', 'USER_ID'] if not os.getenv(var)]
+if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME]):
+    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'URL_SHORTENER_API_KEY', 'CHANNEL_ID', 'FILE_OPENER_BOT_USERNAME'] if not os.getenv(var)]
     raise ValueError(f"Environment variables missing: {', '.join(missing_vars)}")
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
 updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 dispatcher = updater.dispatcher
-
-# Initialize Telethon client with in-memory session
-telethon_client = TelegramClient(MemorySession(), API_ID, API_HASH)
-
-# Define states for conversation handler
-ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
@@ -65,60 +60,46 @@ def shorten_url(long_url: str) -> str:
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
     try:
-        if context.args:
-            encoded_url = context.args[0]
-            decoded_url = base64.b64decode(encoded_url).decode('utf-8')
-            logging.info(f"Decoded URL: {decoded_url}")
-
-            shortened_link = shorten_url(decoded_url)
-            logging.info(f"Shortened URL: {shortened_link}")
-
-            update.message.reply_text(f'Here is your shortened link: {shortened_link}')
-        else:
-            update.message.reply_text('Welcome! Please use the link provided in the channel.')
+        update.message.reply_text(
+            'Please forward the file from the channel to this bot to get the download link.')
     except Exception as e:
         logging.error(f"Error handling /start command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
 
-# Define the handler for document uploads
-def handle_document(update: Update, context: CallbackContext):
-    processing_message = update.message.reply_text('Processing your file, please wait...')
-    
-    file = update.message.document.get_file()
-    file_url = file.file_path
-    file_size = update.message.document.file_size
+# Define the handler for forwarded documents
+def handle_forwarded_document(update: Update, context: CallbackContext):
+    try:
+        if update.message.forward_from_chat and update.message.forward_from_chat.id == int(CHANNEL_ID):
+            file = update.message.document.get_file()
+            file_id = update.message.document.file_id
+            file_name = update.message.document.file_name
+            file_size = update.message.document.file_size
 
-    if file_size > 20 * 1024 * 1024:
-        context.user_data['file_path'] = file_url
-        update.message.reply_text('File is too large. Uploading directly to your Telegram cloud storage. Please wait...')
-        upload_file_to_user_telegram(file_url)
-        return ConversationHandler.END
-    else:
-        short_url = shorten_url(file_url)
-        update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-        
-        context.user_data['short_url'] = short_url
-        return ASK_POST_CONFIRMATION
+            # Print file details
+            logging.info(f"File ID: {file_id}")
+            logging.info(f"File Name: {file_name}")
+            logging.info(f"File Size: {file_size} bytes")
 
-# Upload file to user's Telegram account
-def upload_file_to_user_telegram(file_url: str):
-    async def upload_file():
-        await telethon_client.start()
-        try:
-            await telethon_client.send_file(USER_ID, file_url)
-            logging.info('File uploaded successfully to user\'s Telegram cloud storage.')
-        except Exception as e:
-            logging.error(f'Error uploading file: {e}')
-        await telethon_client.disconnect()
+            # Download the file
+            downloaded_file_path = file.download(custom_path=file_name)
+            logging.info(f"File downloaded to: {downloaded_file_path}")
 
-    with telethon_client:
-        telethon_client.loop.run_until_complete(upload_file())
-
-# Post the shortened URL to the channel
-def post_to_channel(file_name: str, file_opener_url: str):
-    message = (f'File Name: {file_name}\n'
-               f'Access the file using this link: {file_opener_url}')
-    bot.send_message(chat_id=CHANNEL_ID, text=message)
+            if downloaded_file_path:
+                file_url = file.file_path
+                context.user_data['file_url'] = file_url
+                short_url = shorten_url(file_url)
+                update.message.reply_text(f'File processed successfully. Here is your download link: {file_url}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+                context.user_data['short_url'] = short_url
+                return ASK_POST_CONFIRMATION
+            else:
+                update.message.reply_text('Failed to retrieve file URL. Please try again.')
+                return ConversationHandler.END
+        else:
+            update.message.reply_text('Please forward the file from the specified channel.')
+            return ConversationHandler.END
+    except Exception as e:
+        logging.error(f"Error handling forwarded document: {e}")
+        update.message.reply_text('An error occurred while handling the file. Please try again later.')
 
 # Define handlers for conversation
 def ask_post_confirmation(update: Update, context: CallbackContext):
@@ -140,7 +121,7 @@ def ask_file_name(update: Update, context: CallbackContext):
 
     if short_url:
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
-        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
+        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&{file_name}'
 
         post_to_channel(file_name, file_opener_url)
         
@@ -150,8 +131,14 @@ def ask_file_name(update: Update, context: CallbackContext):
     
     return ConversationHandler.END
 
+# Post the shortened URL to the channel
+def post_to_channel(file_name: str, file_opener_url: str):
+    message = (f'File Name: {file_name}\n'
+               f'Access the file using this link: {file_opener_url}')
+    bot.send_message(chat_id=CHANNEL_ID, text=message)
+
 # Add handlers to dispatcher
-dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
+dispatcher.add_handler(MessageHandler(Filters.document & Filters.forwarded, handle_forwarded_document))
 dispatcher.add_handler(CommandHandler('start', start))
 
 # Webhook route
@@ -189,5 +176,5 @@ def favicon():
 
 # Run the app
 if __name__ == '__main__':
-    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
+    # Removed the MAX_CONTENT_LENGTH setting
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
