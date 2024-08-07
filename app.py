@@ -1,199 +1,169 @@
-import logging
 import os
-import base64
-import requests
-from flask import Flask, request, send_from_directory
-from telegram import Bot, Update
-from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
-from dotenv import load_dotenv
+import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-# Load environment variables from .env file
-load_dotenv()
+# Configs
+API_HASH = os.environ['API_HASH']
+APP_ID = int(os.environ['APP_ID'])
+BOT_TOKEN = os.environ['BOT_TOKEN']
+TRACK_CHANNEL = int(os.environ['TRACK_CHANNEL'])
+OWNER_ID = os.environ['OWNER_ID']
 
-# Initialize Flask app
-app = Flask(__name__)
+# Button
+START_BUTTONS = [
+    [
+        InlineKeyboardButton('Source', url='https://github.com/X-Gorn/File-Sharing'),
+        InlineKeyboardButton('Project Channel', url='https://t.me/xTeamBots'),
+    ],
+    [InlineKeyboardButton('Author', url="https://t.me/xgorn")],
+]
 
-# Enable Flask debugging
-app.debug = True
+# Initialize bot
+xbot = Client('File-Sharing', api_id=APP_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+# Notify about bot start
+with xbot:
+    xbot_username = xbot.get_me().username
+    print("Bot started!")
+    xbot.send_message(int(OWNER_ID), "Bot started!")
 
-# Load configuration from environment variables
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-WEBHOOK_URL = os.getenv('WEBHOOK_URL')
-URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
-CHANNEL_ID = os.getenv('CHANNEL_ID')
-FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
-API_ID = os.getenv('API_ID')
-API_HASH = os.getenv('API_HASH')
-
-# Check for missing environment variables
-if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME, API_ID, API_HASH]):
-    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'URL_SHORTENER_API_KEY', 'CHANNEL_ID', 'FILE_OPENER_BOT_USERNAME', 'API_ID', 'API_HASH'] if not os.getenv(var)]
-    raise ValueError(f"Environment variables missing: {', '.join(missing_vars)}")
-
-# Initialize Telegram bot
-bot = Bot(token=TELEGRAM_TOKEN)
-updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
-dispatcher = updater.dispatcher
-
-# Initialize Pyrogram client
-pyrogram_client = Client("my_bot", api_id=API_ID, api_hash=API_HASH)
-
-# Shorten URL using the URL shortener API
-def shorten_url(long_url: str) -> str:
-    api_token = URL_SHORTENER_API_KEY
-    encoded_url = requests.utils.quote(long_url)
-    api_url = f"https://publicearn.com/api?api={api_token}&url={encoded_url}"
-
+# Function to generate download link
+async def generate_download_link(update, file_unique_id, msg_id):
     try:
-        response = requests.get(api_url)
-        response.raise_for_status()
-
-        response_data = response.json()
-        if response_data.get("status") == "success":
-            short_url = response_data.get("shortenedUrl", "")
-            if short_url:
-                return short_url
-        logging.error("Unexpected response format or missing shortened URL")
-        return long_url
-    except requests.RequestException as e:
-        logging.error(f"Request error: {e}")
-        return long_url
-
-# Define the start command handler
-def start(update: Update, context: CallbackContext):
-    try:
-        update.message.reply_text('Please forward the file from the channel to this bot to get the download link.')
-    except Exception as e:
-        logging.error(f"Error handling /start command: {e}")
-        update.message.reply_text('An error occurred. Please try again later.')
-
-# Define the handler for forwarded documents
-def handle_forwarded_document(update: Update, context: CallbackContext):
-    try:
-        if update.message.forward_from_chat and update.message.forward_from_chat.id == int(CHANNEL_ID):
-            file = update.message.document.get_file()
-            file_id = update.message.document.file_id
-            file_name = update.message.document.file_name
-            file_size = update.message.document.file_size
-
-            logging.info(f"File ID: {file_id}")
-            logging.info(f"File Name: {file_name}")
-            logging.info(f"File Size: {file_size} bytes")
-
-            # Download the file
-            try:
-                downloaded_file_path = file.download(custom_path=file_name)
-                logging.info(f"File downloaded to: {downloaded_file_path}")
-                if not downloaded_file_path:
-                    raise Exception("File download path is empty.")
-            except Exception as e:
-                logging.error(f"Error downloading file: {e}")
-                update.message.reply_text('Failed to download the file. Please try again later.')
-                return ConversationHandler.END
-
-            if downloaded_file_path:
-                file_url = file.file_path
-                context.user_data['file_url'] = file_url
-                short_url = shorten_url(file_url)
-                update.message.reply_text(f'File processed successfully. Here is your download link: {file_url}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-                context.user_data['short_url'] = short_url
-                return ASK_POST_CONFIRMATION
-            else:
-                update.message.reply_text('Failed to retrieve file URL. Please try again.')
-                return ConversationHandler.END
+        # Check if message is in media group or single media
+        if '-' in file_unique_id:
+            unique_id = '-'.join(file_unique_id.split('-')[:-1])
         else:
-            update.message.reply_text('Please forward the file from the specified channel.')
-            return ConversationHandler.END
+            unique_id = file_unique_id
+
+        link = f'https://t.me/{xbot_username}?start={unique_id.lower()}-{str(msg_id)}'
+        return link
     except Exception as e:
-        logging.error(f"Error handling forwarded document: {e}")
-        update.message.reply_text('An error occurred while handling the file. Please try again later.')
+        print(f"Error generating download link: {e}")
+        return None
 
-# Define handlers for conversation
-def ask_post_confirmation(update: Update, context: CallbackContext):
-    user_response = update.message.text.lower()
+# Start & Get file
+@xbot.on_message(filters.command('start') & filters.private)
+async def _startfile(bot, update):
+    if update.text == '/start':
+        await update.reply_text(
+            "I'm File-Sharing!\nYou can share any telegram files and get the sharing link using this bot!\n\n/help for more details...",
+            True, reply_markup=InlineKeyboardMarkup(START_BUTTONS))
+        return
 
-    if user_response == 'yes':
-        update.message.reply_text('Please provide the file name:')
-        return ASK_FILE_NAME
-    elif user_response == 'no':
-        update.message.reply_text('The file was not posted.')
-        return ConversationHandler.END
+    if len(update.command) != 2:
+        return
+    code = update.command[1]
+    if '-' in code:
+        msg_id = code.split('-')[-1]
+        unique_id = '-'.join(code.split('-')[:-1])
+
+        if not msg_id.isdigit():
+            return
+        try:
+            check_media_group = await bot.get_media_group(TRACK_CHANNEL, int(msg_id))
+            check = check_media_group[0]
+        except Exception:
+            check = await bot.get_messages(TRACK_CHANNEL, int(msg_id))
+
+        if check.empty:
+            await update.reply_text('Error: [Message does not exist]\n/help for more details...')
+            return
+        if check.video:
+            unique_idx = check.video.file_unique_id
+        elif check.photo:
+            unique_idx = check.photo.file_unique_id
+        elif check.audio:
+            unique_idx = check.audio.file_unique_id
+        elif check.document:
+            unique_idx = check.document.file_unique_id
+        elif check.sticker:
+            unique_idx = check.sticker.file_unique_id
+        elif check.animation:
+            unique_idx = check.animation.file_unique_id
+        elif check.voice:
+            unique_idx = check.voice.file_unique_id
+        elif check.video_note:
+            unique_idx = check.video_note.file_unique_id
+        if unique_id != unique_idx.lower():
+            return
+        try:
+            await bot.copy_media_group(update.from_user.id, TRACK_CHANNEL, int(msg_id))
+        except Exception:
+            await check.copy(update.from_user.id)
     else:
-        update.message.reply_text('Please respond with "yes" or "no".')
-        return ASK_POST_CONFIRMATION
+        return
 
-def ask_file_name(update: Update, context: CallbackContext):
-    file_name = update.message.text
-    short_url = context.user_data.get('short_url')
+# Help message
+@xbot.on_message(filters.command('help') & filters.private)
+async def _help(bot, update):
+    await update.reply_text("Supported file types:\n\n- Video\n- Audio\n- Photo\n- Document\n- Sticker\n- GIF\n- Voice note\n- Video note\n\n If bot didn't respond, contact @xgorn", True)
 
-    if short_url:
-        short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
-        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&{file_name}'
-
-        post_to_channel(file_name, file_opener_url)
-
-        update.message.reply_text('File posted to channel successfully.')
+# Reply with download link
+async def __reply(update, copied):
+    msg_id = copied.message_id
+    if copied.video:
+        unique_idx = copied.video.file_unique_id
+    elif copied.photo:
+        unique_idx = copied.photo.file_unique_id
+    elif copied.audio:
+        unique_idx = copied.audio.file_unique_id
+    elif copied.document:
+        unique_idx = copied.document.file_unique_id
+    elif copied.sticker:
+        unique_idx = copied.sticker.file_unique_id
+    elif copied.animation:
+        unique_idx = copied.animation.file_unique_id
+    elif copied.voice:
+        unique_idx = copied.voice.file_unique_id
+    elif copied.video_note:
+        unique_idx = copied.video_note.file_unique_id
     else:
-        update.message.reply_text('Failed to retrieve the shortened URL.')
+        await copied.delete()
+        return
 
-    return ConversationHandler.END
-
-# Post the shortened URL to the channel using Pyrogram
-def post_to_channel(file_name: str, file_opener_url: str):
-    message = (f'File Name: {file_name}\n'
-               f'Access the file using this link: {file_opener_url}')
-    try:
-        with pyrogram_client:
-            pyrogram_client.send_message(chat_id=CHANNEL_ID, text=message)
-    except Exception as e:
-        logging.error(f"Error posting to channel: {e}")
-
-# Add handlers to dispatcher
-dispatcher.add_handler(MessageHandler(Filters.document & Filters.forwarded, handle_forwarded_document))
-dispatcher.add_handler(CommandHandler('start', start))
-
-# Webhook route
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    try:
-        update = Update.de_json(request.get_json(force=True), bot)
-        dispatcher.process_update(update)
-        return 'ok', 200
-    except Exception as e:
-        logging.error(f'Error processing update: {e}')
-        return 'error', 500
-
-# Home route
-@app.route('/')
-def home():
-    return 'Hello, World!'
-
-# Webhook setup route
-@app.route('/setwebhook', methods=['GET', 'POST'])
-def setup_webhook():
-    try:
-        response = requests.post(
-            f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-            data={'url': WEBHOOK_URL}
+    link = await generate_download_link(update, unique_idx, msg_id)
+    if link:
+        await update.reply_text(
+            'Here is Your Sharing Link:',
+            True,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton('Sharing Link', url=link)]
+            ])
         )
-        if response.json().get('ok'):
-            return "Webhook setup ok"
-        else:
-            return "Webhook setup failed"
-    except Exception as e:
-        logging.error(f"Error setting up webhook: {e}")
-        return "Webhook setup failed"
+    await asyncio.sleep(0.5)  # Wait to avoid 5 sec flood ban 
 
-# Favicon route
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory('static', 'favicon.ico')
+# Store media_group
+media_group_id = 0
+@xbot.on_message(filters.media & filters.private & filters.media_group)
+async def _main_group(bot, update):
+    global media_group_id
+    if OWNER_ID == 'all':
+        pass
+    elif int(OWNER_ID) == update.from_user.id:
+        pass
+    else:
+        return
 
-# Run the app
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    if int(media_group_id) != int(update.media_group_id):
+        media_group_id = update.media_group_id
+        copied = (await bot.copy_media_group(TRACK_CHANNEL, update.from_user.id, update.message_id))[0]
+        await __reply(update, copied)
+    else:
+        return
+
+# Store file
+@xbot.on_message(filters.media & filters.private & ~filters.media_group)
+async def _main(bot, update):
+    if OWNER_ID == 'all':
+        pass
+    elif int(OWNER_ID) == update.from_user.id:
+        pass
+    else:
+        return
+
+    copied = await update.copy(TRACK_CHANNEL)
+    await __reply(update, copied)
+
+xbot.run()
