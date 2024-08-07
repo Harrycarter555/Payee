@@ -80,16 +80,11 @@ def handle_forwarded_document(update: Update, context: CallbackContext):
             logging.info(f"File Name: {file_name}")
             logging.info(f"File Size: {file_size} bytes")
 
-            # Remove file size check
-            # if file_size > 25 * 1024 * 1024:  # Greater than 25MB
-            #     update.message.reply_text('The file is too large. Please upload it to your own Telegram cloud storage and provide the URL here.')
-            #     return ConversationHandler.END
-            
             # Download the file
             downloaded_file_path = file.download(custom_path=file_name)
             logging.info(f"File downloaded to: {downloaded_file_path}")
 
-            if file:
+            if downloaded_file_path:
                 file_url = file.file_path
                 context.user_data['file_url'] = file_url
                 short_url = shorten_url(file_url)
