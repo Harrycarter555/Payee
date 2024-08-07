@@ -41,19 +41,26 @@ def start(update: Update, context: CallbackContext):
 def handle_file_upload(update: Update, context: CallbackContext):
     try:
         file = update.message.document.get_file()
+        file_id = update.message.document.file_id
         file_name = update.message.document.file_name
 
-        # Construct file URL (placeholder as actual URL is not provided)
-        file_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={file_name}'
+        # Download the file from Telegram
+        file_path = file.download(custom_path=file_name)
 
-        # Base64 encode the file URL
+        # Encode the file URL
+        file_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={file_id}&{file_name}'
         encoded_file_url = base64.b64encode(file_url.encode('utf-8')).decode('utf-8')
 
         # Construct the file opener URL
         file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_file_url}&&{file_name}'
 
-        # Send the file opener URL to the user
-        update.message.reply_text(f'File has been processed successfully! Here is your file opener URL: {file_opener_url}')
+        # Send the file directly to the user
+        with open(file_path, 'rb') as file_to_send:
+            bot.send_document(chat_id=update.message.chat_id, document=file_to_send, filename=file_name)
+
+        # Inform the user
+        update.message.reply_text(f'File has been shared successfully! Here is your file opener URL format: {file_opener_url}')
+
     except Exception as e:
         logging.error(f"Error handling file upload: {e}", exc_info=True)
         update.message.reply_text('An error occurred while processing the file. Please try again later.')
