@@ -87,6 +87,7 @@ def handle_forwarded_document(update: Update, context: CallbackContext):
             
             # Download the file
             downloaded_file_path = file.download(custom_path=file_name)
+            logging.info(f"File downloaded to: {downloaded_file_path}")
 
             if file:
                 file_url = file.file_path
