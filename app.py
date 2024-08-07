@@ -52,7 +52,11 @@ def handle_forwarded_document(update: Update, context: CallbackContext):
             file_info = bot.get_file(file_id)
             file_path = file_info.file_path
             
-            # Directly send file_path to the user
+            # Logging file path and other details
+            logging.info(f"File ID: {file_id}")
+            logging.info(f"File Path: {file_path}")
+            
+            # Provide the file path directly to the user
             update.message.reply_text(f'File path: {file_path}')
         else:
             update.message.reply_text('Please forward the file from the specified channel.')
