@@ -1,18 +1,29 @@
 import os
-import asyncio
-from dotenv import load_dotenv
 from pyrogram import Client, filters
+from dotenv import load_dotenv
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Configs
 load_dotenv()
-API_HASH = os.environ['API_HASH']
-APP_ID = int(os.environ['APP_ID'])
-BOT_TOKEN = os.environ['BOT_TOKEN']
-TRACK_CHANNEL = int(os.environ['TRACK_CHANNEL'])
-OWNER_ID = os.environ['OWNER_ID']
+API_HASH = os.getenv('API_HASH')
+APP_ID = int(os.getenv('APP_ID'))
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+TRACK_CHANNEL = int(os.getenv('TRACK_CHANNEL'))
+OWNER_ID = os.getenv('OWNER_ID')
 
-# Button
+# Ensure the working directory exists
+os.makedirs('/tmp/pyrogram', exist_ok=True)
+
+# Create the bot client
+xbot = Client(
+    'File-Sharing',
+    api_id=APP_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN,
+    workdir='/tmp/pyrogram'  # Specify the path for the SQLite database
+)
+
+# Define buttons
 START_BUTTONS = [
     [
         InlineKeyboardButton('Source', url='https://github.com/X-Gorn/File-Sharing'),
@@ -21,36 +32,18 @@ START_BUTTONS = [
     [InlineKeyboardButton('Author', url="https://t.me/xgorn")],
 ]
 
-# Initialize bot
-xbot = Client('File-Sharing', api_id=APP_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-
 # Notify about bot start
 with xbot:
-    xbot_username = xbot.get_me().username
+    xbot_username = xbot.get_me().username  # Better call it global once due to Telegram flood id
     print("Bot started!")
     xbot.send_message(int(OWNER_ID), "Bot started!")
-
-# Function to generate download link
-async def generate_download_link(update, file_unique_id, msg_id):
-    try:
-        # Check if message is in media group or single media
-        if '-' in file_unique_id:
-            unique_id = '-'.join(file_unique_id.split('-')[:-1])
-        else:
-            unique_id = file_unique_id
-
-        link = f'https://t.me/{xbot_username}?start={unique_id.lower()}-{str(msg_id)}'
-        return link
-    except Exception as e:
-        print(f"Error generating download link: {e}")
-        return None
 
 # Start & Get file
 @xbot.on_message(filters.command('start') & filters.private)
 async def _startfile(bot, update):
     if update.text == '/start':
         await update.reply_text(
-            "I'm File-Sharing!\nYou can share any telegram files and get the sharing link using this bot!\n\n/help for more details...",
+            f"I'm File-Sharing!\nYou can share any Telegram files and get the sharing link using this bot!\n\n/help for more details...",
             True, reply_markup=InlineKeyboardMarkup(START_BUTTONS))
         return
 
@@ -59,7 +52,7 @@ async def _startfile(bot, update):
     code = update.command[1]
     if '-' in code:
         msg_id = code.split('-')[-1]
-        unique_id = '-'.join(code.split('-')[:-1])
+        unique_id = '-'.join(code.split('-')[0:-1])
 
         if not msg_id.isdigit():
             return
@@ -97,12 +90,11 @@ async def _startfile(bot, update):
     else:
         return
 
-# Help message
+# Help msg
 @xbot.on_message(filters.command('help') & filters.private)
 async def _help(bot, update):
     await update.reply_text("Supported file types:\n\n- Video\n- Audio\n- Photo\n- Document\n- Sticker\n- GIF\n- Voice note\n- Video note\n\n If bot didn't respond, contact @xgorn", True)
 
-# Reply with download link
 async def __reply(update, copied):
     msg_id = copied.message_id
     if copied.video:
@@ -125,21 +117,20 @@ async def __reply(update, copied):
         await copied.delete()
         return
 
-    link = await generate_download_link(update, unique_idx, msg_id)
-    if link:
-        await update.reply_text(
-            'Here is Your Sharing Link:',
-            True,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton('Sharing Link', url=link)]
-            ])
-        )
-    await asyncio.sleep(0.5)  # Wait to avoid 5 sec flood ban 
+    await update.reply_text(
+        'Here is Your Sharing Link:',
+        True,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton('Sharing Link',
+                                  url=f'https://t.me/{xbot_username}?start={unique_idx.lower()}-{str(msg_id)}')]
+        ])
+    )
+    await asyncio.sleep(0.5)  # Wait to avoid 5 sec flood ban
 
 # Store media_group
 media_group_id = 0
 @xbot.on_message(filters.media & filters.private & filters.media_group)
-async def _main_group(bot, update):
+async def _main_grop(bot, update):
     global media_group_id
     if OWNER_ID == 'all':
         pass
@@ -168,4 +159,5 @@ async def _main(bot, update):
     copied = await update.copy(TRACK_CHANNEL)
     await __reply(update, copied)
 
+# Run the bot
 xbot.run()
