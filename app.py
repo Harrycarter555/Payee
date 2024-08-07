@@ -1,25 +1,20 @@
 import os
 import asyncio
-import logging
 from dotenv import load_dotenv
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.errors import FloodWait
 from aiohttp import web
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger()
-
 # Load environment variables from .env file
 load_dotenv()
 
-# Configurations
-API_HASH = os.getenv('API_HASH')
-APP_ID = int(os.getenv('APP_ID', 0))  # Default to 0 if not set
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-TRACK_CHANNEL = int(os.getenv('TRACK_CHANNEL', 0))  # Default to 0 if not set
-OWNER_ID = os.getenv('OWNER_ID')
+# Configs
+API_HASH = os.environ.get('API_HASH')
+APP_ID = int(os.environ.get('APP_ID', 0))  # Default to 0 if not set
+BOT_TOKEN = os.environ.get('BOT_TOKEN')
+TRACK_CHANNEL = int(os.environ.get('TRACK_CHANNEL', 0))  # Default to 0 if not set
+OWNER_ID = os.environ.get('OWNER_ID')
 
 # Button
 START_BUTTONS = [
@@ -30,7 +25,7 @@ START_BUTTONS = [
     [InlineKeyboardButton('Author', url="https://t.me/xgorn")],
 ]
 
-# Initialize bot
+# Running bot
 xbot = Client('File-Sharing', api_id=APP_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 async def start_bot():
@@ -38,22 +33,22 @@ async def start_bot():
         try:
             async with xbot:
                 xbot_username = (await xbot.get_me()).username
-                logger.info("Bot started!")
+                print("Bot started!")
                 await xbot.send_message(int(OWNER_ID), "Bot started!")
                 await xbot.run()
         except FloodWait as e:
-            logger.info(f"Rate limit exceeded. Waiting for {e.x} seconds.")
+            print(f"Rate limit exceeded. Waiting for {e.x} seconds.")
             await asyncio.sleep(e.x)  # Wait for the specified time before retrying
         except Exception as e:
-            logger.error(f"An error occurred: {e}")
+            print(f"An error occurred: {e}")
             break
 
-# Start command handler
+# Start & Get file
 @xbot.on_message(filters.command('start') & filters.private)
 async def _startfile(bot, update):
     if update.text == '/start':
         await update.reply_text(
-            "I'm File-Sharing!\nYou can share any Telegram files and get the sharing link using this bot!\n\n/help for more details...",
+            f"I'm File-Sharing!\nYou can share any Telegram files and get the sharing link using this bot!\n\n/help for more details...",
             True, reply_markup=InlineKeyboardMarkup(START_BUTTONS))
         return
 
@@ -105,7 +100,7 @@ async def _startfile(bot, update):
     else:
         return
 
-# Help command handler
+# Help msg
 @xbot.on_message(filters.command('help') & filters.private)
 async def _help(bot, update):
     await update.reply_text("Supported file types:\n\n- Video\n- Audio\n- Photo\n- Document\n- Sticker\n- GIF\n- Voice note\n- Video note\n\n If bot didn't respond, contact @xgorn", True)
@@ -143,7 +138,7 @@ async def __reply(update, copied):
     )
     await asyncio.sleep(0.5)  # Wait to avoid flood ban
 
-# Media group handler
+# Store media_group
 media_group_id = 0
 @xbot.on_message(filters.media & filters.private & filters.media_group)
 async def _main_grop(bot, update):
@@ -162,7 +157,7 @@ async def _main_grop(bot, update):
     else:
         return
 
-# Single file handler
+# Store file
 @xbot.on_message(filters.media & filters.private & ~filters.media_group)
 async def _main(bot, update):
     if OWNER_ID == 'all':
@@ -182,13 +177,5 @@ async def handler(request):
     return web.Response(text='Method not allowed', status=405)
 
 # Run the bot
-def lambda_handler(event, context):
-    asyncio.run(start_bot())
-    return {
-        'statusCode': 200,
-        'body': 'Bot is running'
-    }
-
-# If running locally, start the bot
 if __name__ == "__main__":
     asyncio.run(start_bot())
