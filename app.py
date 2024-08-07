@@ -154,7 +154,7 @@ def ask_file_name(update: Update, context: CallbackContext):
 def handle_url(update: Update, context: CallbackContext):
     url = update.message.text
     if requests.utils.urlparse(url).scheme in ["http", "https"]:
-        processing_message = update.message.reply_text('Processing your URL, please wait...')
+        update.message.reply_text('Processing your URL, please wait...')
         shortened_link = shorten_url(url)
         update.message.reply_text(f'Here is your shortened link: {shortened_link}\n\nDo you want to post this link to the channel? (yes/no)')
         context.user_data['short_url'] = shortened_link
