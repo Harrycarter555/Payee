@@ -59,20 +59,10 @@ async def handle_forwarded_document(client, message: Message):
         logging.error(f"Error handling forwarded document: {e}", exc_info=True)
         await message.reply_text('An error occurred while handling the file. Please try again later.')
 
-# Webhook route
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    return 'ok', 200
-
 # Home route
 @app.route('/')
 def home():
     return 'Hello, World!'
-
-# Webhook setup route
-@app.route('/setwebhook', methods=['GET', 'POST'])
-def setup_webhook():
-    return "Webhook setup is not required for Pyrogram polling", 200
 
 # Favicon route
 @app.route('/favicon.ico')
