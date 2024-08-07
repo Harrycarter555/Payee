@@ -88,6 +88,8 @@ def handle_forwarded_document(update: Update, context: CallbackContext):
             try:
                 downloaded_file_path = file.download(custom_path=file_name)
                 logging.info(f"File downloaded to: {downloaded_file_path}")
+                if not downloaded_file_path:
+                    raise Exception("File download path is empty.")
             except Exception as e:
                 logging.error(f"Error downloading file: {e}")
                 update.message.reply_text('Failed to download the file. Please try again later.')
