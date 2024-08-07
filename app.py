@@ -71,7 +71,7 @@ async def _startfile(bot, update):
         if check.empty:
             await update.reply_text('Error: [Message does not exist]\n/help for more details...')
             return
-        
+
         unique_idx = None
         if check.video:
             unique_idx = check.video.file_unique_id
@@ -89,10 +89,10 @@ async def _startfile(bot, update):
             unique_idx = check.voice.file_unique_id
         elif check.video_note:
             unique_idx = check.video_note.file_unique_id
-        
+
         if unique_id != unique_idx.lower():
             return
-        
+
         try:
             await bot.copy_media_group(update.from_user.id, TRACK_CHANNEL, int(msg_id))
         except Exception:
