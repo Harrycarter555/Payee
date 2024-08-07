@@ -80,14 +80,18 @@ def handle_forwarded_document(update: Update, context: CallbackContext):
             file_name = update.message.document.file_name
             file_size = update.message.document.file_size
 
-            # Print file details
             logging.info(f"File ID: {file_id}")
             logging.info(f"File Name: {file_name}")
             logging.info(f"File Size: {file_size} bytes")
 
             # Download the file
-            downloaded_file_path = file.download(custom_path=file_name)
-            logging.info(f"File downloaded to: {downloaded_file_path}")
+            try:
+                downloaded_file_path = file.download(custom_path=file_name)
+                logging.info(f"File downloaded to: {downloaded_file_path}")
+            except Exception as e:
+                logging.error(f"Error downloading file: {e}")
+                update.message.reply_text('Failed to download the file. Please try again later.')
+                return ConversationHandler.END
 
             if downloaded_file_path:
                 file_url = file.file_path
