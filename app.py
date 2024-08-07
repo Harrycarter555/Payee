@@ -6,7 +6,8 @@ from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 from dotenv import load_dotenv
-from pyrogram import Client
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,10 +31,8 @@ API_ID = os.getenv('API_ID')
 API_HASH = os.getenv('API_HASH')
 
 # Check for missing environment variables
-required_vars = ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'URL_SHORTENER_API_KEY', 'CHANNEL_ID', 'FILE_OPENER_BOT_USERNAME', 'API_ID', 'API_HASH']
-missing_vars = [var for var in required_vars if not os.getenv(var)]
-
-if missing_vars:
+if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME, API_ID, API_HASH]):
+    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'URL_SHORTENER_API_KEY', 'CHANNEL_ID', 'FILE_OPENER_BOT_USERNAME', 'API_ID', 'API_HASH'] if not os.getenv(var)]
     raise ValueError(f"Environment variables missing: {', '.join(missing_vars)}")
 
 # Initialize Telegram bot
@@ -56,7 +55,9 @@ def shorten_url(long_url: str) -> str:
 
         response_data = response.json()
         if response_data.get("status") == "success":
-            return response_data.get("shortenedUrl", long_url)
+            short_url = response_data.get("shortenedUrl", "")
+            if short_url:
+                return short_url
         logging.error("Unexpected response format or missing shortened URL")
         return long_url
     except requests.RequestException as e:
@@ -195,4 +196,4 @@ def favicon():
 
 # Run the app
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
