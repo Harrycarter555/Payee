@@ -75,7 +75,6 @@ def handle_forwarded_document(update: Update, context: CallbackContext):
             file_name = update.message.document.file_name
             file_size = update.message.document.file_size
 
-            # Print file details
             logging.info(f"File ID: {file_id}")
             logging.info(f"File Name: {file_name}")
             logging.info(f"File Size: {file_size} bytes")
@@ -92,13 +91,15 @@ def handle_forwarded_document(update: Update, context: CallbackContext):
                 context.user_data['short_url'] = short_url
                 return ASK_POST_CONFIRMATION
             else:
+                logging.error('Failed to retrieve file URL after download.')
                 update.message.reply_text('Failed to retrieve file URL. Please try again.')
                 return ConversationHandler.END
         else:
+            logging.warning('The message was not forwarded from the specified channel.')
             update.message.reply_text('Please forward the file from the specified channel.')
             return ConversationHandler.END
     except Exception as e:
-        logging.error(f"Error handling forwarded document: {e}")
+        logging.error(f"Error handling forwarded document: {e}", exc_info=True)
         update.message.reply_text('An error occurred while handling the file. Please try again later.')
 
 # Define handlers for conversation
@@ -149,7 +150,7 @@ def webhook():
         dispatcher.process_update(update)
         return 'ok', 200
     except Exception as e:
-        logging.error(f'Error processing update: {e}')
+        logging.error(f'Error processing update: {e}', exc_info=True)
         return 'error', 500
 
 # Home route
@@ -176,4 +177,5 @@ def favicon():
 
 # Run the app
 if __name__ == '__main__':
+    # Removed the MAX_CONTENT_LENGTH setting
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
