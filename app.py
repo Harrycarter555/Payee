@@ -69,25 +69,38 @@ def start(update: Update, context: CallbackContext):
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
-    file = update.message.document.get_file()
-    file_id = update.message.document.file_id
-    file_url = file.file_path
-    
-    # Check file size (Note: The file size is in bytes)
-    file_size = update.message.document.file_size
-    if file_size > 20 * 1024 * 1024:  # Greater than 20MB
-        update.message.reply_text('Your file is large. Please upload it to your own Telegram cloud storage and provide the URL here.')
-        return ConversationHandler.END
-    
-    if file_url:
-        context.user_data['file_url'] = file_url
-        short_url = shorten_url(file_url)
-        update.message.reply_text(f'File uploaded successfully. Here is your download link: {file_url}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-        context.user_data['short_url'] = short_url
-        return ASK_POST_CONFIRMATION
-    else:
-        update.message.reply_text('Failed to retrieve file URL. Please try again.')
-        return ConversationHandler.END
+    try:
+        file = update.message.document.get_file()
+        file_id = update.message.document.file_id
+        file_name = update.message.document.file_name
+        file_size = update.message.document.file_size
+
+        # Print file details
+        logging.info(f"File ID: {file_id}")
+        logging.info(f"File Name: {file_name}")
+        logging.info(f"File Size: {file_size} bytes")
+
+        # Check file size (Note: The file size is in bytes)
+        if file_size > 20 * 1024 * 1024:  # Greater than 20MB
+            update.message.reply_text('Your file is large. Please upload it to your own Telegram cloud storage and provide the URL here.')
+            return ConversationHandler.END
+        
+        # Download the file
+        downloaded_file_path = file.download(custom_path=file_name)
+
+        if file:
+            file_url = file.file_path
+            context.user_data['file_url'] = file_url
+            short_url = shorten_url(file_url)
+            update.message.reply_text(f'File uploaded successfully. Here is your download link: {file_url}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+            context.user_data['short_url'] = short_url
+            return ASK_POST_CONFIRMATION
+        else:
+            update.message.reply_text('Failed to retrieve file URL. Please try again.')
+            return ConversationHandler.END
+    except Exception as e:
+        logging.error(f"Error handling document: {e}")
+        update.message.reply_text('An error occurred while handling the file. Please try again later.')
 
 # Define handlers for conversation
 def ask_post_confirmation(update: Update, context: CallbackContext):
