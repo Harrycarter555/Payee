@@ -1,10 +1,10 @@
 import logging
 import os
+import base64
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters
 from dotenv import load_dotenv
-import base64
 
 # Load environment variables from .env file
 load_dotenv()
@@ -41,12 +41,16 @@ def start(update: Update, context: CallbackContext):
 def handle_file_upload(update: Update, context: CallbackContext):
     try:
         file = update.message.document.get_file()
-        file_id = update.message.document.file_id
         file_name = update.message.document.file_name
 
-        # Create the file opener URL
-        short_url_encoded = base64.b64encode(file_id.encode('utf-8')).decode('utf-8')
-        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
+        # Construct file URL (placeholder as actual URL is not provided)
+        file_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={file_name}'
+
+        # Base64 encode the file URL
+        encoded_file_url = base64.b64encode(file_url.encode('utf-8')).decode('utf-8')
+
+        # Construct the file opener URL
+        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_file_url}&&{file_name}'
 
         # Send the file opener URL to the user
         update.message.reply_text(f'File has been processed successfully! Here is your file opener URL: {file_opener_url}')
