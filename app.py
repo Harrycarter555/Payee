@@ -9,7 +9,7 @@ from aiohttp import web
 # Load environment variables from .env file
 load_dotenv()
 
-# Configs
+# Configurations
 API_HASH = os.environ.get('API_HASH')
 APP_ID = int(os.environ.get('APP_ID', 0))  # Default to 0 if not set
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
@@ -25,7 +25,7 @@ START_BUTTONS = [
     [InlineKeyboardButton('Author', url="https://t.me/xgorn")],
 ]
 
-# Running bot
+# Initialize bot
 xbot = Client('File-Sharing', api_id=APP_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 async def start_bot():
@@ -43,7 +43,7 @@ async def start_bot():
             print(f"An error occurred: {e}")
             break
 
-# Start & Get file
+# Handle /start command
 @xbot.on_message(filters.command('start') & filters.private)
 async def _startfile(bot, update):
     if update.text == '/start':
@@ -71,7 +71,7 @@ async def _startfile(bot, update):
         if check.empty:
             await update.reply_text('Error: [Message does not exist]\n/help for more details...')
             return
-
+        
         unique_idx = None
         if check.video:
             unique_idx = check.video.file_unique_id
@@ -89,10 +89,10 @@ async def _startfile(bot, update):
             unique_idx = check.voice.file_unique_id
         elif check.video_note:
             unique_idx = check.video_note.file_unique_id
-
+        
         if unique_id != unique_idx.lower():
             return
-
+        
         try:
             await bot.copy_media_group(update.from_user.id, TRACK_CHANNEL, int(msg_id))
         except Exception:
@@ -100,7 +100,7 @@ async def _startfile(bot, update):
     else:
         return
 
-# Help msg
+# Handle /help command
 @xbot.on_message(filters.command('help') & filters.private)
 async def _help(bot, update):
     await update.reply_text("Supported file types:\n\n- Video\n- Audio\n- Photo\n- Document\n- Sticker\n- GIF\n- Voice note\n- Video note\n\n If bot didn't respond, contact @xgorn", True)
@@ -138,7 +138,7 @@ async def __reply(update, copied):
     )
     await asyncio.sleep(0.5)  # Wait to avoid flood ban
 
-# Store media_group
+# Handle media group
 media_group_id = 0
 @xbot.on_message(filters.media & filters.private & filters.media_group)
 async def _main_grop(bot, update):
@@ -157,7 +157,7 @@ async def _main_grop(bot, update):
     else:
         return
 
-# Store file
+# Handle single media files
 @xbot.on_message(filters.media & filters.private & ~filters.media_group)
 async def _main(bot, update):
     if OWNER_ID == 'all':
