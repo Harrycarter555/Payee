@@ -5,8 +5,6 @@ import requests
 from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
-from telethon import TelegramClient
-from telethon.sessions import MemorySession
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -27,25 +25,16 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 URL_SHORTENER_API_KEY = os.getenv('URL_SHORTENER_API_KEY')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 FILE_OPENER_BOT_USERNAME = os.getenv('FILE_OPENER_BOT_USERNAME')
-API_ID = os.getenv('API_ID')
-API_HASH = os.getenv('API_HASH')
-USER_ID = os.getenv('USER_ID')
 
 # Check for missing environment variables
-if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME, API_ID, API_HASH, USER_ID]):
-    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'URL_SHORTENER_API_KEY', 'CHANNEL_ID', 'FILE_OPENER_BOT_USERNAME', 'API_ID', 'API_HASH', 'USER_ID'] if not os.getenv(var)]
+if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE_OPENER_BOT_USERNAME]):
+    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'URL_SHORTENER_API_KEY', 'CHANNEL_ID', 'FILE_OPENER_BOT_USERNAME'] if not os.getenv(var)]
     raise ValueError(f"Environment variables missing: {', '.join(missing_vars)}")
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
 updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 dispatcher = updater.dispatcher
-
-# Initialize Telethon client with in-memory session
-telethon_client = TelegramClient(MemorySession(), API_ID, API_HASH)
-
-# Define states for conversation handler
-ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
@@ -82,20 +71,13 @@ def start(update: Update, context: CallbackContext):
 def handle_document(update: Update, context: CallbackContext):
     file = update.message.document.get_file()
     file_url = file.file_path
-    file_size = update.message.document.file_size
 
-    if file_size > 20 * 1024 * 1024:
-        # Handle large files
-        context.user_data['file_url'] = file_url
-        update.message.reply_text('File is too large for direct processing. Please upload it directly to your Telegram cloud storage and provide the file URL here.')
-        return ASK_POST_CONFIRMATION
-    else:
-        # Process smaller files
-        context.user_data['file_url'] = file_url
-        short_url = shorten_url(file_url)
-        update.message.reply_text(f'File uploaded successfully. Here is your download link: {file_url}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-        context.user_data['short_url'] = short_url
-        return ASK_POST_CONFIRMATION
+    # Process the file URL
+    context.user_data['file_url'] = file_url
+    short_url = shorten_url(file_url)
+    update.message.reply_text(f'File uploaded successfully. Here is your download link: {file_url}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+    context.user_data['short_url'] = short_url
+    return ASK_POST_CONFIRMATION
 
 # Define handlers for conversation
 def ask_post_confirmation(update: Update, context: CallbackContext):
