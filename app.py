@@ -98,7 +98,7 @@ def handle_forwarded_document(update: Update, context: CallbackContext):
             update.message.reply_text('Please forward the file from the specified channel.')
             return ConversationHandler.END
     except Exception as e:
-        logging.error(f"Error handling forwarded document: {e}")
+        logging.error(f"Error handling forwarded document: {e}", exc_info=True)
         update.message.reply_text('An error occurred while handling the file. Please try again later.')
 
 # Define handlers for conversation
@@ -152,7 +152,7 @@ def webhook():
         dispatcher.process_update(update)
         return 'ok', 200
     except Exception as e:
-        logging.error(f'Error processing update: {e}')
+        logging.error(f'Error processing update: {e}', exc_info=True)
         return 'error', 500
 
 # Home route
