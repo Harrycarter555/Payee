@@ -1,29 +1,22 @@
 import os
-from pyrogram import Client, filters
+import time
+import asyncio
 from dotenv import load_dotenv
+from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from pyrogram.errors import FloodWait
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configs
-load_dotenv()
-API_HASH = os.getenv('API_HASH')
-APP_ID = int(os.getenv('APP_ID'))
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-TRACK_CHANNEL = int(os.getenv('TRACK_CHANNEL'))
-OWNER_ID = os.getenv('OWNER_ID')
+API_HASH = os.environ.get('API_HASH')
+APP_ID = int(os.environ.get('APP_ID', 0))  # Default to 0 if not set
+BOT_TOKEN = os.environ.get('BOT_TOKEN')
+TRACK_CHANNEL = int(os.environ.get('TRACK_CHANNEL', 0))  # Default to 0 if not set
+OWNER_ID = os.environ.get('OWNER_ID')
 
-# Ensure the working directory exists
-os.makedirs('/tmp/pyrogram', exist_ok=True)
-
-# Create the bot client
-xbot = Client(
-    'File-Sharing',
-    api_id=APP_ID,
-    api_hash=API_HASH,
-    bot_token=BOT_TOKEN,
-    workdir='/tmp/pyrogram'  # Specify the path for the SQLite database
-)
-
-# Define buttons
+# Button
 START_BUTTONS = [
     [
         InlineKeyboardButton('Source', url='https://github.com/X-Gorn/File-Sharing'),
@@ -32,11 +25,23 @@ START_BUTTONS = [
     [InlineKeyboardButton('Author', url="https://t.me/xgorn")],
 ]
 
-# Notify about bot start
-with xbot:
-    xbot_username = xbot.get_me().username  # Better call it global once due to Telegram flood id
-    print("Bot started!")
-    xbot.send_message(int(OWNER_ID), "Bot started!")
+# Running bot
+xbot = Client('File-Sharing', api_id=APP_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+
+async def start_bot():
+    while True:
+        try:
+            async with xbot:
+                xbot_username = (await xbot.get_me()).username
+                print("Bot started!")
+                await xbot.send_message(int(OWNER_ID), "Bot started!")
+                await xbot.run()
+        except FloodWait as e:
+            print(f"Rate limit exceeded. Waiting for {e.x} seconds.")
+            time.sleep(e.x)  # Wait for the specified time before retrying
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            break
 
 # Start & Get file
 @xbot.on_message(filters.command('start') & filters.private)
@@ -49,6 +54,7 @@ async def _startfile(bot, update):
 
     if len(update.command) != 2:
         return
+
     code = update.command[1]
     if '-' in code:
         msg_id = code.split('-')[-1]
@@ -65,6 +71,8 @@ async def _startfile(bot, update):
         if check.empty:
             await update.reply_text('Error: [Message does not exist]\n/help for more details...')
             return
+
+        unique_idx = None
         if check.video:
             unique_idx = check.video.file_unique_id
         elif check.photo:
@@ -81,8 +89,10 @@ async def _startfile(bot, update):
             unique_idx = check.voice.file_unique_id
         elif check.video_note:
             unique_idx = check.video_note.file_unique_id
+
         if unique_id != unique_idx.lower():
             return
+
         try:
             await bot.copy_media_group(update.from_user.id, TRACK_CHANNEL, int(msg_id))
         except Exception:
@@ -97,6 +107,7 @@ async def _help(bot, update):
 
 async def __reply(update, copied):
     msg_id = copied.message_id
+    unique_idx = None
     if copied.video:
         unique_idx = copied.video.file_unique_id
     elif copied.photo:
@@ -125,7 +136,7 @@ async def __reply(update, copied):
                                   url=f'https://t.me/{xbot_username}?start={unique_idx.lower()}-{str(msg_id)}')]
         ])
     )
-    await asyncio.sleep(0.5)  # Wait to avoid 5 sec flood ban
+    await asyncio.sleep(0.5)  # Wait to avoid flood ban
 
 # Store media_group
 media_group_id = 0
@@ -160,4 +171,4 @@ async def _main(bot, update):
     await __reply(update, copied)
 
 # Run the bot
-xbot.run()
+start_bot()
