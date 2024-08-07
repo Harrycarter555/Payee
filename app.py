@@ -80,10 +80,10 @@ def handle_forwarded_document(update: Update, context: CallbackContext):
             logging.info(f"File Name: {file_name}")
             logging.info(f"File Size: {file_size} bytes")
 
-            # Check file size (Note: The file size is in bytes)
-            if file_size > 25 * 1024 * 1024:  # Greater than 25MB
-                update.message.reply_text('The file is too large. Please upload it to your own Telegram cloud storage and provide the URL here.')
-                return ConversationHandler.END
+            # Remove file size check
+            # if file_size > 25 * 1024 * 1024:  # Greater than 25MB
+            #     update.message.reply_text('The file is too large. Please upload it to your own Telegram cloud storage and provide the URL here.')
+            #     return ConversationHandler.END
             
             # Download the file
             downloaded_file_path = file.download(custom_path=file_name)
@@ -181,5 +181,5 @@ def favicon():
 
 # Run the app
 if __name__ == '__main__':
-    app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # Set max file size to 25MB
+    # Removed the MAX_CONTENT_LENGTH setting
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
