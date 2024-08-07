@@ -57,7 +57,7 @@ def shorten_url(long_url: str) -> str:
             short_url = response_data.get("shortenedUrl", "")
             if short_url:
                 return short_url
-        logging.error("Unexpected response format")
+        logging.error("Unexpected response format or missing shortened URL")
         return long_url
     except requests.RequestException as e:
         logging.error(f"Request error: {e}")
@@ -66,8 +66,7 @@ def shorten_url(long_url: str) -> str:
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
     try:
-        update.message.reply_text(
-            'Please forward the file from the channel to this bot to get the download link.')
+        update.message.reply_text('Please forward the file from the channel to this bot to get the download link.')
     except Exception as e:
         logging.error(f"Error handling /start command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
@@ -141,8 +140,11 @@ def ask_file_name(update: Update, context: CallbackContext):
 def post_to_channel(file_name: str, file_opener_url: str):
     message = (f'File Name: {file_name}\n'
                f'Access the file using this link: {file_opener_url}')
-    with pyrogram_client:
-        pyrogram_client.send_message(chat_id=CHANNEL_ID, text=message)
+    try:
+        with pyrogram_client:
+            pyrogram_client.send_message(chat_id=CHANNEL_ID, text=message)
+    except Exception as e:
+        logging.error(f"Error posting to channel: {e}")
 
 # Add handlers to dispatcher
 dispatcher.add_handler(MessageHandler(Filters.document & Filters.forwarded, handle_forwarded_document))
@@ -167,13 +169,17 @@ def home():
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
-    response = requests.post(
-        f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
-        data={'url': WEBHOOK_URL}
-    )
-    if response.json().get('ok'):
-        return "Webhook setup ok"
-    else:
+    try:
+        response = requests.post(
+            f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
+            data={'url': WEBHOOK_URL}
+        )
+        if response.json().get('ok'):
+            return "Webhook setup ok"
+        else:
+            return "Webhook setup failed"
+    except Exception as e:
+        logging.error(f"Error setting up webhook: {e}")
         return "Webhook setup failed"
 
 # Favicon route
@@ -183,5 +189,4 @@ def favicon():
 
 # Run the app
 if __name__ == '__main__':
-    # Removed the MAX_CONTENT_LENGTH setting
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
