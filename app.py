@@ -48,11 +48,12 @@ def handle_forwarded_document(update: Update, context: CallbackContext):
             file = update.message.document.get_file()
             file_id = update.message.document.file_id
             
-            # Generate the file URL from the file_id
-            file_url = f'https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file.file_path}'
+            # Fetch file information using file_id
+            file_info = bot.get_file(file_id)
+            file_path = file_info.file_path
             
-            # Provide the download link to the user
-            update.message.reply_text(f'Here is your download link: {file_url}')
+            # Directly send file_path to the user
+            update.message.reply_text(f'File path: {file_path}')
         else:
             update.message.reply_text('Please forward the file from the specified channel.')
     except Exception as e:
