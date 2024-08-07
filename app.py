@@ -6,6 +6,8 @@ from flask import Flask, request, send_from_directory
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 from dotenv import load_dotenv
+from pyrogram import Client, filters
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 # Load environment variables from .env file
 load_dotenv()
@@ -35,6 +37,9 @@ if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE
 bot = Bot(token=TELEGRAM_TOKEN)
 updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 dispatcher = updater.dispatcher
+
+# Initialize Pyrogram client
+pyrogram_app = Client("my_bot", bot_token=TELEGRAM_TOKEN)
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
@@ -142,6 +147,46 @@ def post_to_channel(file_name: str, file_opener_url: str):
 dispatcher.add_handler(MessageHandler(Filters.document & Filters.forwarded, handle_forwarded_document))
 dispatcher.add_handler(CommandHandler('start', start))
 
+# Pyrogram handler for getting download link
+@pyrogram_app.on_message(filters.private & filters.command('getlink'))
+async def get_download_link(client: Client, message: Message):
+    while True:
+        try:
+            # Ask the user to forward a file
+            file_message = await client.ask(
+                text="Forward a file from the DB Channel...",
+                chat_id=message.from_user.id,
+                filters=(filters.forwarded & filters.document),
+                timeout=60
+            )
+        except:
+            return
+        
+        # Retrieve the file ID and download the file
+        if file_message.document:
+            file = file_message.document
+            file_id = file.file_id
+            
+            # Get the file path from Telegram servers
+            file_info = await client.get_file(file_id)
+            file_path = file_info.file_path
+            
+            # Generate download link
+            file_link = f'https://api.telegram.org/file/bot{client.token}/{file_path}'
+            
+            # Send the download link to the user
+            reply_markup = InlineKeyboardMarkup(
+                [[InlineKeyboardButton("🔁 Share URL", url=f'https://telegram.me/share/url?url={file_link}')]]
+            )
+            await file_message.reply_text(
+                f"<b>Here is your download link:</b>\n\n{file_link}",
+                quote=True,
+                reply_markup=reply_markup
+            )
+            break
+        else:
+            await file_message.reply("❌ Error\n\nPlease forward a valid document from the DB Channel.", quote=True)
+
 # Webhook route
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -175,7 +220,9 @@ def setup_webhook():
 def favicon():
     return send_from_directory('static', 'favicon.ico')
 
-# Run the app
+# Run the Flask app
 if __name__ == '__main__':
-    # Removed the MAX_CONTENT_LENGTH setting
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
+# Run the Pyrogram client
+pyrogram_app.run()
