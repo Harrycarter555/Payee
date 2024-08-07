@@ -20,10 +20,11 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
+CHANNEL_ID = os.getenv('CHANNEL_ID')  # Channel or Group ID where file will be shared
 
 # Check for missing environment variables
-if not all([TELEGRAM_TOKEN, WEBHOOK_URL]):
-    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL'] if not os.getenv(var)]
+if not all([TELEGRAM_TOKEN, WEBHOOK_URL, CHANNEL_ID]):
+    missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'CHANNEL_ID'] if not os.getenv(var)]
     raise ValueError(f"Environment variables missing: {', '.join(missing_vars)}")
 
 # Initialize Telegram bot
@@ -39,12 +40,13 @@ def start(update: Update, context: CallbackContext):
 def handle_file_upload(update: Update, context: CallbackContext):
     try:
         file = update.message.document.get_file()
-        file_url = file.file_path
+        file_id = update.message.document.file_id
+        file_name = update.message.document.file_name
 
-        # Provide the streaming link to the user
-        # Note: Telegram file_path is not a direct streaming link, but it can be used for direct file access.
-        streaming_link = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_url.replace('/file/bot', '')}"
-        update.message.reply_text(f'File uploaded successfully! Here is your streaming link: {streaming_link}')
+        # Forward the file to the specified channel or group
+        bot.send_document(chat_id=CHANNEL_ID, document=file_id, caption=f'File Name: {file_name}')
+        
+        update.message.reply_text('File has been shared successfully in the channel/group.')
     except Exception as e:
         logging.error(f"Error handling file upload: {e}", exc_info=True)
         update.message.reply_text('An error occurred while processing the file. Please try again later.')
