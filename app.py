@@ -88,17 +88,26 @@ def handle_document(update: Update, context: CallbackContext):
     file_url = file.file_path
     file_size = update.message.document.file_size
 
+    # Ensure that file_path is saved
+    context.user_data['file_path'] = file_url
+
+    logging.info(f"Received file with URL: {file_url} and size: {file_size}")
+
     if file_size > 20 * 1024 * 1024:
-        context.user_data['file_path'] = file_url
         update.message.reply_text('File is too large. Uploading directly to your Telegram cloud storage. Please wait...')
         upload_file_to_user_telegram(file_url)
         return ConversationHandler.END
     else:
         short_url = shorten_url(file_url)
-        update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-        
-        context.user_data['short_url'] = short_url
-        return ASK_POST_CONFIRMATION
+        if short_url:
+            # Notify user with the shortened URL
+            update.message.reply_text(f'File uploaded successfully. Here is your short link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+            context.user_data['short_url'] = short_url
+            return ASK_POST_CONFIRMATION
+        else:
+            # Handle case where URL shortening fails
+            update.message.reply_text('Failed to shorten the URL. Please try again later.')
+            return ConversationHandler.END
 
 # Upload file to user's Telegram account
 def upload_file_to_user_telegram(file_url: str):
@@ -191,4 +200,3 @@ def favicon():
 if __name__ == '__main__':
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 80)))
-    
