@@ -34,6 +34,7 @@ pyrogram_client = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=T
 # Define the start command handler
 @pyrogram_client.on_message(filters.command("start"))
 async def start(client, message: Message):
+    logging.info("Received /start command")
     try:
         await message.reply_text('Please forward the file from the channel to this bot to get the download link.')
     except Exception as e:
@@ -43,15 +44,13 @@ async def start(client, message: Message):
 # Define the handler for forwarded documents
 @pyrogram_client.on_message(filters.document & filters.forwarded)
 async def handle_forwarded_document(client, message: Message):
+    logging.info("Received forwarded document")
     try:
         if message.forward_from_chat and message.forward_from_chat.id == int(CHANNEL_ID):
             file_id = message.document.file_id
-
-            # Get file information using Pyrogram
             file_info = await client.get_file(file_id)
             file_path = file_info.file_path
-
-            # Provide the file path directly to the user
+            logging.info(f"File path: {file_path}")
             await message.reply_text(f'File path: {file_path}')
         else:
             await message.reply_text('Please forward the file from the specified channel.')
@@ -71,5 +70,7 @@ def favicon():
 
 # Run the Flask app and Pyrogram client
 if __name__ == '__main__':
+    logging.info("Starting Pyrogram client")
     pyrogram_client.start()
+    logging.info("Starting Flask app")
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
