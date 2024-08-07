@@ -73,7 +73,12 @@ def handle_document(update: Update, context: CallbackContext):
     file_id = update.message.document.file_id
     file_url = file.file_path
     
-    # Generate the file URL directly
+    # Check file size (Note: The file size is in bytes)
+    file_size = update.message.document.file_size
+    if file_size > 20 * 1024 * 1024:  # Greater than 20MB
+        update.message.reply_text('Your file is large. Please upload it to your own Telegram cloud storage and provide the URL here.')
+        return ConversationHandler.END
+    
     if file_url:
         context.user_data['file_url'] = file_url
         short_url = shorten_url(file_url)
