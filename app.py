@@ -61,45 +61,48 @@ def shorten_url(long_url: str) -> str:
 def start(update: Update, context: CallbackContext):
     try:
         update.message.reply_text(
-            'Please upload your file directly to your Telegram cloud storage and then provide the file URL here.\n'
-            'You can upload your file by sending it to your own Telegram chat.')
+            'Please forward the file from the channel to this bot to get the download link.')
     except Exception as e:
         logging.error(f"Error handling /start command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
 
-# Define the handler for document uploads
-def handle_document(update: Update, context: CallbackContext):
+# Define the handler for forwarded documents
+def handle_forwarded_document(update: Update, context: CallbackContext):
     try:
-        file = update.message.document.get_file()
-        file_id = update.message.document.file_id
-        file_name = update.message.document.file_name
-        file_size = update.message.document.file_size
+        if update.message.forward_from_chat and update.message.forward_from_chat.id == int(CHANNEL_ID):
+            file = update.message.document.get_file()
+            file_id = update.message.document.file_id
+            file_name = update.message.document.file_name
+            file_size = update.message.document.file_size
 
-        # Print file details
-        logging.info(f"File ID: {file_id}")
-        logging.info(f"File Name: {file_name}")
-        logging.info(f"File Size: {file_size} bytes")
+            # Print file details
+            logging.info(f"File ID: {file_id}")
+            logging.info(f"File Name: {file_name}")
+            logging.info(f"File Size: {file_size} bytes")
 
-        # Check file size (Note: The file size is in bytes)
-        if file_size > 20 * 1024 * 1024:  # Greater than 20MB
-            update.message.reply_text('Your file is large. Please upload it to your own Telegram cloud storage and provide the URL here.')
-            return ConversationHandler.END
-        
-        # Download the file
-        downloaded_file_path = file.download(custom_path=file_name)
+            # Check file size (Note: The file size is in bytes)
+            if file_size > 25 * 1024 * 1024:  # Greater than 25MB
+                update.message.reply_text('The file is too large. Please upload it to your own Telegram cloud storage and provide the URL here.')
+                return ConversationHandler.END
+            
+            # Download the file
+            downloaded_file_path = file.download(custom_path=file_name)
 
-        if file:
-            file_url = file.file_path
-            context.user_data['file_url'] = file_url
-            short_url = shorten_url(file_url)
-            update.message.reply_text(f'File uploaded successfully. Here is your download link: {file_url}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
-            context.user_data['short_url'] = short_url
-            return ASK_POST_CONFIRMATION
+            if file:
+                file_url = file.file_path
+                context.user_data['file_url'] = file_url
+                short_url = shorten_url(file_url)
+                update.message.reply_text(f'File processed successfully. Here is your download link: {file_url}\n\nHere is your shortened URL: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+                context.user_data['short_url'] = short_url
+                return ASK_POST_CONFIRMATION
+            else:
+                update.message.reply_text('Failed to retrieve file URL. Please try again.')
+                return ConversationHandler.END
         else:
-            update.message.reply_text('Failed to retrieve file URL. Please try again.')
+            update.message.reply_text('Please forward the file from the specified channel.')
             return ConversationHandler.END
     except Exception as e:
-        logging.error(f"Error handling document: {e}")
+        logging.error(f"Error handling forwarded document: {e}")
         update.message.reply_text('An error occurred while handling the file. Please try again later.')
 
 # Define handlers for conversation
@@ -139,7 +142,7 @@ def post_to_channel(file_name: str, file_opener_url: str):
     bot.send_message(chat_id=CHANNEL_ID, text=message)
 
 # Add handlers to dispatcher
-dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
+dispatcher.add_handler(MessageHandler(Filters.document & Filters.forwarded, handle_forwarded_document))
 dispatcher.add_handler(CommandHandler('start', start))
 
 # Webhook route
