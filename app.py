@@ -4,10 +4,10 @@ from flask import Flask, request, send_from_directory
 import requests
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
-import base64
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
 from dotenv import load_dotenv
+from post_command import post_command, ask_post_confirmation, ask_file_name
 
 # Load environment variables from .env file
 load_dotenv()
@@ -127,70 +127,7 @@ def upload_file_to_user_telegram(file_url: str):
     with telethon_client:
         telethon_client.loop.run_until_complete(upload_file())
 
-# Post the shortened URL to the channel
-def post_to_channel(file_name: str, file_opener_url: str):
-    message = (f'File Name: {file_name}\n'
-               f'Access the file using this link: {file_opener_url}')
-    bot.send_message(chat_id=CHANNEL_ID, text=message)
-
 # Define handlers for conversation
-def ask_post_confirmation(update: Update, context: CallbackContext):
-    user_response = update.message.text.lower()
-    
-    if user_response == 'yes':
-        update.message.reply_text('Please provide the file name:')
-        return ASK_FILE_NAME
-    elif user_response == 'no':
-        update.message.reply_text('The file was not posted.')
-        return ConversationHandler.END
-    else:
-        update.message.reply_text('Please respond with "yes" or "no".')
-        return ASK_POST_CONFIRMATION
-
-def ask_file_name(update: Update, context: CallbackContext):
-    file_name = update.message.text
-    short_url = context.user_data.get('short_url')
-
-    if short_url:
-        short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
-        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
-
-        post_to_channel(file_name, file_opener_url)
-        
-        update.message.reply_text(f'File posted to channel successfully.')
-    else:
-        update.message.reply_text('Failed to retrieve the shortened URL.')
-    
-    return ConversationHandler.END
-
-# Define the /post command handler
-def post_command(update: Update, context: CallbackContext):
-    try:
-        if context.args:
-            encoded_url = context.args[0]
-            decoded_url = base64.b64decode(encoded_url).decode('utf-8')
-            logging.info(f"Decoded URL: {decoded_url}")
-
-            short_url = shorten_url(decoded_url)
-            logging.info(f"Shortened URL: {short_url}")
-
-            if short_url:
-                short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
-                update.message.reply_text(
-                    f'Here is your shortened link: {short_url}\n\n'
-                    'Do you want to post this link to the channel? (yes/no)'
-                )
-                context.user_data['short_url'] = short_url
-                return ASK_POST_CONFIRMATION
-            else:
-                update.message.reply_text('Failed to shorten the URL. Please try again later.')
-        else:
-            update.message.reply_text('Please provide a URL.')
-    except Exception as e:
-        logging.error(f"Error handling /post command: {e}")
-        update.message.reply_text('An error occurred. Please try again later.')
-
-# Add handlers to dispatcher
 conv_handler = ConversationHandler(
     entry_points=[MessageHandler(Filters.document, handle_document)],
     states={
