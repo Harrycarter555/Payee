@@ -26,7 +26,7 @@ bot = Bot(token=TELEGRAM_TOKEN)
 updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 dispatcher = updater.dispatcher
 
-ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
+ASK_FILE_NAME = range(1)
 
 def shorten_url(long_url: str) -> str:
     try:
@@ -58,34 +58,23 @@ def post(update: Update, context: CallbackContext):
         shortened_url = shorten_url(long_url)
         file_opener_url = generate_file_opener_url(shortened_url, "file_name")
         update.message.reply_text(
-            f'Shortened URL: {shortened_url}\nFile opener URL: {file_opener_url}\nProvide the file name:'
+            f'File URL processed:\nFile path: {long_url}\nShortened link: {shortened_url}\nFile opener URL: {file_opener_url}\nPost to channel? (yes/no)'
         )
         context.user_data.update({'short_url': shortened_url, 'file_opener_url': file_opener_url})
         return ASK_FILE_NAME
     else:
         update.message.reply_text('Please provide a URL to shorten.')
 
-def handle_document(update: Update, context: CallbackContext):
-    file_url = update.message.document.get_file().file_path
-    short_url = shorten_url(file_url)
-    if short_url:
-        file_name = update.message.document.file_name
-        file_opener_url = generate_file_opener_url(short_url, file_name)
-        update.message.reply_text(
-            f'File uploaded.\nFile path: {file_url}\nShortened link: {short_url}\nFile opener URL: {file_opener_url}\nPost to channel? (yes/no)'
-        )
-        context.user_data.update({'short_url': short_url, 'file_opener_url': file_opener_url})
-        return ASK_POST_CONFIRMATION
-    update.message.reply_text('Failed to shorten the URL.')
-
-def ask_post_confirmation(update: Update, context: CallbackContext):
-    if update.message.text.lower() == 'yes':
+def ask_file_name(update: Update, context: CallbackContext):
+    user_response = update.message.text.lower()
+    if user_response == 'yes':
         update.message.reply_text('Provide the file name:')
         return ASK_FILE_NAME
-    update.message.reply_text('File not posted.')
-    return ConversationHandler.END
+    else:
+        update.message.reply_text('File not posted.')
+        return ConversationHandler.END
 
-def ask_file_name(update: Update, context: CallbackContext):
+def handle_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     file_opener_url = context.user_data.get('file_opener_url')
     if file_opener_url:
@@ -97,13 +86,11 @@ def ask_file_name(update: Update, context: CallbackContext):
 
 # Handlers
 dispatcher.add_handler(ConversationHandler(
-    entry_points=[MessageHandler(Filters.document, handle_document)],
-    states={ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
-            ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)]},
+    entry_points=[CommandHandler('post', post)],
+    states={ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, handle_file_name)]},
     fallbacks=[]
 ))
 dispatcher.add_handler(CommandHandler('start', start))
-dispatcher.add_handler(CommandHandler('post', post))
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
