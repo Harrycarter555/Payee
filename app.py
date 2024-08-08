@@ -150,18 +150,6 @@ def ask_file_name(update: Update, context: CallbackContext):
     
     return ConversationHandler.END
 
-# Define the handler for URL
-def handle_url(update: Update, context: CallbackContext):
-    url = update.message.text
-    if requests.utils.urlparse(url).scheme in ["http", "https"]:
-        update.message.reply_text('Processing your URL, please wait...')
-        shortened_link = shorten_url(url)
-        update.message.reply_text(f'Here is your shortened link: {shortened_link}\n\nDo you want to post this link to the channel? (yes/no)')
-        context.user_data['short_url'] = shortened_link
-        return ASK_POST_CONFIRMATION
-    else:
-        update.message.reply_text('Please provide a valid URL.')
-
 # Define the /post command handler
 def post_command(update: Update, context: CallbackContext):
     update.message.reply_text('Please provide the URL to be shortened:')
@@ -169,7 +157,7 @@ def post_command(update: Update, context: CallbackContext):
 
 # Add handlers to dispatcher
 conv_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.document | Filters.text & ~Filters.command, handle_document), MessageHandler(Filters.text & ~Filters.command, handle_url)],
+    entry_points=[MessageHandler(Filters.document | Filters.text & ~Filters.command, handle_document)],
     states={
         ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
         ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
