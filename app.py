@@ -2,7 +2,7 @@ import logging
 import os
 import base64
 import requests
-from flask import Flask, request, send_from_directory
+from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
 from telethon import TelegramClient
@@ -34,7 +34,7 @@ if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Initialize Telegram bot
+# Initialize Telegram bot and updater
 bot = Bot(token=TELEGRAM_TOKEN)
 updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
 dispatcher = updater.dispatcher
@@ -54,12 +54,10 @@ def shorten_url(long_url: str) -> str:
     try:
         response = requests.get(api_url)
         response.raise_for_status()
-        
         response_data = response.json()
         if response_data.get("status") == "success":
             short_url = response_data.get("shortenedUrl", "")
-            if short_url:
-                return short_url
+            return short_url
         logger.error("Unexpected response format")
         return long_url
     except requests.RequestException as e:
@@ -92,8 +90,8 @@ def post(update: Update, context: CallbackContext):
             shortened_url = shorten_url(long_url)
             logger.info(f"Shortened URL: {shortened_url}")
 
-            encoded_url = base64.b64encode(shortened_url.encode('utf-8')).decode('utf-8')
-            file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}'
+            short_url_encoded = base64.b64encode(shortened_url.encode('utf-8')).decode('utf-8')
+            file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}'
 
             update.message.reply_text(
                 f'Here is your shortened link: {shortened_url}\n'
@@ -181,7 +179,6 @@ def ask_file_name(update: Update, context: CallbackContext):
 
     if short_url:
         post_to_channel(file_name, file_opener_url)
-        
         update.message.reply_text(f'File posted to channel successfully.')
     else:
         update.message.reply_text('Failed to retrieve the shortened URL.')
@@ -218,8 +215,6 @@ def webhook():
 def home():
     return 'Hello, World!'
 
-# Webhook setup route
-@app.route('/setwebhook', methods=['GET', 'POST'])
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
