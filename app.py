@@ -100,7 +100,7 @@ def handle_document(update: Update, context: CallbackContext):
     else:
         short_url = shorten_url(file_url)
         if short_url:
-            # Notify user with the shortened URL
+            # Notify user with the shortened URL only
             update.message.reply_text(
                 f'File uploaded successfully.\n'
                 f'Here is your short link: {short_url}\n\n'
@@ -164,28 +164,28 @@ def ask_file_name(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 # Define the /post command handler
-def post(update: Update, context: CallbackContext):
+def post_command(update: Update, context: CallbackContext):
     try:
         if context.args:
-            original_url = context.args[0]
-            logging.info(f"Received URL: {original_url}")
+            encoded_url = context.args[0]
+            decoded_url = base64.b64decode(encoded_url).decode('utf-8')
+            logging.info(f"Decoded URL: {decoded_url}")
 
-            short_url = shorten_url(original_url)
+            short_url = shorten_url(decoded_url)
+            logging.info(f"Shortened URL: {short_url}")
+
             if short_url:
                 short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
-                file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}'
-
                 update.message.reply_text(
-                    f'Here is your short link: {short_url}\n\n'
+                    f'Here is your shortened link: {short_url}\n\n'
                     'Do you want to post this link to the channel? (yes/no)'
                 )
                 context.user_data['short_url'] = short_url
-                context.user_data['file_opener_url'] = file_opener_url
                 return ASK_POST_CONFIRMATION
             else:
                 update.message.reply_text('Failed to shorten the URL. Please try again later.')
         else:
-            update.message.reply_text('Please provide a URL to shorten.')
+            update.message.reply_text('Please provide a URL.')
     except Exception as e:
         logging.error(f"Error handling /post command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
@@ -202,7 +202,7 @@ conv_handler = ConversationHandler(
 
 dispatcher.add_handler(conv_handler)
 dispatcher.add_handler(CommandHandler('start', start))
-dispatcher.add_handler(CommandHandler('post', post))
+dispatcher.add_handler(CommandHandler('post', post_command))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
@@ -228,7 +228,7 @@ def setup_webhook():
         data={'url': WEBHOOK_URL}
     )
     if response.json().get('ok'):
-return "Webhook setup ok"
+        return "Webhook setup ok"
     else:
         return "Webhook setup failed"
 
@@ -237,7 +237,10 @@ return "Webhook setup ok"
 def favicon():
     return send_from_directory('static', 'favicon.ico')
 
-# Run the app
+# Initialize and run the Flask app
 if __name__ == '__main__':
-    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 80)))
+    # Set up logging
+    logging.basicConfig(level=logging.INFO)
+    
+    # Start Flask app
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
