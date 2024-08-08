@@ -39,7 +39,7 @@ dispatcher = updater.dispatcher
 telethon_client = TelegramClient(MemorySession(), API_ID, API_HASH)
 
 # Define states for conversation handler
-ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
+ASK_POST_CONFIRMATION, ASK_FILE_NAME, ASK_URL = range(3)
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
@@ -65,6 +65,24 @@ def shorten_url(long_url: str) -> str:
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Please upload a file or send a URL to Post.')
+
+# Define the /post command handler
+def post_command(update: Update, context: CallbackContext):
+    update.message.reply_text('Please provide the URL to be shortened:')
+    return ASK_URL
+
+# Handle URL input for /post command
+def handle_post_url(update: Update, context: CallbackContext):
+    url = update.message.text
+    if requests.utils.urlparse(url).scheme in ["http", "https"]:
+        update.message.reply_text('Processing your URL, please wait...')
+        shortened_link = shorten_url(url)
+        update.message.reply_text(f'Here is your shortened link: {shortened_link}\n\nDo you want to post this link to the channel? (yes/no)')
+        context.user_data['short_url'] = shortened_link
+        return ASK_POST_CONFIRMATION
+    else:
+        update.message.reply_text('Please provide a valid URL.')
+        return ASK_URL
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
@@ -168,12 +186,14 @@ conv_handler = ConversationHandler(
     states={
         ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
         ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
+        ASK_URL: [MessageHandler(Filters.text & ~Filters.command, handle_post_url)]
     },
     fallbacks=[]
 )
 
 dispatcher.add_handler(conv_handler)
 dispatcher.add_handler(CommandHandler('start', start))
+dispatcher.add_handler(CommandHandler('post', post_command))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
@@ -197,7 +217,7 @@ def setup_webhook():
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
         data={'url': WEBHOOK_URL}
-    )
+        )
     if response.json().get('ok'):
         return "Webhook setup ok"
     else:
