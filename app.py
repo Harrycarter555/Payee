@@ -68,37 +68,7 @@ def start(update: Update, context: CallbackContext):
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
-    processing_message = update.message.reply_text('Processing your file, please wait...')
-    
-    file = update.message.document.get_file()
-    file_url = file.file_path
-    file_size = update.message.document.file_size
-
-    # Ensure that file_path is saved
-    context.user_data['file_path'] = file_url
-
-    logging.info(f"Received file with URL: {file_url} and size: {file_size}")
-
-    if file_size > 20 * 1024 * 1024:
-        update.message.reply_text('File is too large. Uploading directly to your Telegram cloud storage. Please wait...')
-        upload_file_to_user_telegram(file_url)
-        return ConversationHandler.END
-    else:
-        short_url = shorten_url(file_url)
-        if short_url:
-            # Notify user with the file path and shortened URL
-            update.message.reply_text(
-                f'File uploaded successfully.\n'
-                f'File path: {file_url}\n'
-                f'Here is your shortened link: {short_url}\n\n'
-                'Do you want to post this link to the channel? (yes/no)'
-            )
-            context.user_data['short_url'] = short_url
-            return ASK_POST_CONFIRMATION
-        else:
-            # Handle case where URL shortening fails
-            update.message.reply_text('Failed to shorten the URL. Please try again later.')
-            return ConversationHandler.END
+    update.message.reply_text('Please use the /post command to start the URL shortening process.')
 
 # Upload file to user's Telegram account
 def upload_file_to_user_telegram(file_url: str):
@@ -155,11 +125,24 @@ def post_command(update: Update, context: CallbackContext):
     update.message.reply_text('Please provide the URL to be shortened:')
     return ASK_POST_CONFIRMATION
 
-# Add handlers to dispatcher
+# Process the URL for shortening and continue conversation
+def process_url(update: Update, context: CallbackContext):
+    url = update.message.text
+    short_url = shorten_url(url)
+    
+    if short_url:
+        update.message.reply_text(f'Here is your shortened link: {short_url}\n\nDo you want to post this link to the channel? (yes/no)')
+        context.user_data['short_url'] = short_url
+        return ASK_POST_CONFIRMATION
+    else:
+        update.message.reply_text('Failed to shorten the URL. Please try again.')
+        return ConversationHandler.END
+
+# Define conversation handler
 conv_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.document | Filters.text & ~Filters.command, handle_document)],
+    entry_points=[CommandHandler('post', post_command)],
     states={
-        ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
+        ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, process_url)],
         ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
     },
     fallbacks=[]
@@ -167,7 +150,7 @@ conv_handler = ConversationHandler(
 
 dispatcher.add_handler(conv_handler)
 dispatcher.add_handler(CommandHandler('start', start))
-dispatcher.add_handler(CommandHandler('post', post_command))
+dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
