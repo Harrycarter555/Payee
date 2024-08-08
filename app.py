@@ -39,7 +39,7 @@ dispatcher = updater.dispatcher
 telethon_client = TelegramClient(MemorySession(), API_ID, API_HASH)
 
 # Define states for conversation handler
-ASK_POST_CONFIRMATION, ASK_FILE_NAME, ASK_URL = range(3)
+ASK_POST_CONFIRMATION, ASK_FILE_NAME = range(2)
 
 # Shorten URL using the URL shortener API
 def shorten_url(long_url: str) -> str:
@@ -162,22 +162,10 @@ def handle_url(update: Update, context: CallbackContext):
     else:
         update.message.reply_text('Please provide a valid URL.')
 
-# Define the handler for /post command
+# Define the /post command handler
 def post_command(update: Update, context: CallbackContext):
     update.message.reply_text('Please provide the URL to be shortened:')
-    return ASK_URL
-
-# Handle the URL provided in the /post command
-def handle_post_url(update: Update, context: CallbackContext):
-    url = update.message.text
-    if requests.utils.urlparse(url).scheme in ["http", "https"]:
-        update.message.reply_text('Processing your URL, please wait...')
-        shortened_link = shorten_url(url)
-        update.message.reply_text(f'Here is your shortened link: {shortened_link}\n\nDo you want to post this link to the channel? (yes/no)')
-        context.user_data['short_url'] = shortened_link
-        return ASK_POST_CONFIRMATION
-    else:
-        update.message.reply_text('Please provide a valid URL.')
+    return ASK_POST_CONFIRMATION
 
 # Add handlers to dispatcher
 conv_handler = ConversationHandler(
@@ -189,19 +177,9 @@ conv_handler = ConversationHandler(
     fallbacks=[]
 )
 
-post_conv_handler = ConversationHandler(
-    entry_points=[CommandHandler('post', post_command)],
-    states={
-        ASK_URL: [MessageHandler(Filters.text & ~Filters.command, handle_post_url)],
-        ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
-        ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
-    },
-    fallbacks=[]
-)
-
 dispatcher.add_handler(conv_handler)
-dispatcher.add_handler(post_conv_handler)
 dispatcher.add_handler(CommandHandler('start', start))
+dispatcher.add_handler(CommandHandler('post', post_command))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
@@ -230,6 +208,11 @@ def setup_webhook():
         return "Webhook setup ok"
     else:
         return "Webhook setup failed"
+
+# Favicon route
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory('static', 'favicon.ico')
 
 # Run Flask app
 if __name__ == '__main__':
