@@ -78,6 +78,32 @@ def handle_document(update: Update, context: CallbackContext):
         return ASK_POST_CONFIRMATION
     update.message.reply_text('Failed to shorten the URL.')
 
+def handle_photo(update: Update, context: CallbackContext):
+    file_url = update.message.photo[-1].get_file().file_path
+    short_url = shorten_url(file_url)
+    if short_url:
+        file_name = 'photo.jpg'  # Set a default file name for photos
+        file_opener_url = generate_file_opener_url(short_url, file_name)
+        update.message.reply_text(
+            f'Photo uploaded.\nFile path: {file_url}\nShortened link: {short_url}\nFile opener URL: {file_opener_url}\nPost to channel? (yes/no)'
+        )
+        context.user_data.update({'short_url': short_url, 'file_opener_url': file_opener_url})
+        return ASK_POST_CONFIRMATION
+    update.message.reply_text('Failed to shorten the URL.')
+
+def handle_video(update: Update, context: CallbackContext):
+    file_url = update.message.video.get_file().file_path
+    short_url = shorten_url(file_url)
+    if short_url:
+        file_name = 'video.mp4'  # Set a default file name for videos
+        file_opener_url = generate_file_opener_url(short_url, file_name)
+        update.message.reply_text(
+            f'Video uploaded.\nFile path: {file_url}\nShortened link: {short_url}\nFile opener URL: {file_opener_url}\nPost to channel? (yes/no)'
+        )
+        context.user_data.update({'short_url': short_url, 'file_opener_url': file_opener_url})
+        return ASK_POST_CONFIRMATION
+    update.message.reply_text('Failed to shorten the URL.')
+
 def ask_post_confirmation(update: Update, context: CallbackContext):
     if update.message.text.lower() == 'yes':
         update.message.reply_text('Provide the file name:')
@@ -97,7 +123,9 @@ def ask_file_name(update: Update, context: CallbackContext):
 
 # Handlers
 dispatcher.add_handler(ConversationHandler(
-    entry_points=[MessageHandler(Filters.document, handle_document)],
+    entry_points=[MessageHandler(Filters.document, handle_document),
+                  MessageHandler(Filters.photo, handle_photo),
+                  MessageHandler(Filters.video, handle_video)],
     states={ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
             ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)]},
     fallbacks=[]
