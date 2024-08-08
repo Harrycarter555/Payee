@@ -8,6 +8,7 @@ from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandle
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
 from dotenv import load_dotenv
+from logging.handlers import RotatingFileHandler
 
 # Load environment variables from .env file
 load_dotenv()
@@ -33,6 +34,18 @@ if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Set up rotating file handler
+file_handler = RotatingFileHandler('app.log', maxBytes=10000000, backupCount=5)
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+
+# Add the file handler to the root logger
+logging.getLogger().addHandler(file_handler)
+
+# Ensure Flask's internal logger uses the same configuration
+app.logger.setLevel(logging.DEBUG)
+app.logger.addHandler(file_handler)
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
@@ -82,6 +95,26 @@ def start(update: Update, context: CallbackContext):
             update.message.reply_text('Welcome! Please use the link provided in the channel.')
     except Exception as e:
         logging.error(f"Error handling /start command: {e}")
+        update.message.reply_text('An error occurred. Please try again later.')
+
+# Define the /post command handler
+def post(update: Update, context: CallbackContext):
+    try:
+        if context.args:
+            encoded_url = context.args[0]
+            decoded_url = base64.b64decode(encoded_url).decode('utf-8')
+            logging.info(f"Decoded URL: {decoded_url}")
+
+            shortened_link = shorten_url(decoded_url)
+            logging.info(f"Shortened URL: {shortened_link}")
+
+            update.message.reply_text(f'Here is your shortened link: {shortened_link}')
+            context.user_data['short_url'] = shortened_link
+            return ask_post_confirmation(update, context)
+        else:
+            update.message.reply_text('Please provide a URL to shorten.')
+    except Exception as e:
+        logging.error(f"Error handling /post command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
 
 # Define the handler for document uploads
@@ -152,7 +185,6 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
-    file_path = context.user_data.get('file_path')
 
     if short_url:
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
@@ -160,7 +192,7 @@ def ask_file_name(update: Update, context: CallbackContext):
 
         post_to_channel(file_name, file_opener_url)
         
-        update.message.reply_text(f'File posted to channel successfully.\nFile Path: {file_path}')
+        update.message.reply_text(f'File posted to channel successfully.')
     else:
         update.message.reply_text('Failed to retrieve the shortened URL.')
     
@@ -178,6 +210,7 @@ conv_handler = ConversationHandler(
 
 dispatcher.add_handler(conv_handler)
 dispatcher.add_handler(CommandHandler('start', start))
+dispatcher.add_handler(CommandHandler('post', post))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
@@ -207,12 +240,10 @@ def setup_webhook():
     else:
         return "Webhook setup failed"
 
-# Favicon route
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory('static', 'favicon.ico')
-
-# Run the app
+# Main entry point for the Flask application
 if __name__ == '__main__':
-    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 80)))
+    # Set Flask's port and debug mode from environment variables or defaults
+    port = int(os.getenv('PORT', 5000))
+    debug_mode = os.getenv('DEBUG', 'False').lower() in ['true', '1']
+
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
