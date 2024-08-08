@@ -100,10 +100,9 @@ def handle_document(update: Update, context: CallbackContext):
     else:
         short_url = shorten_url(file_url)
         if short_url:
-            # Notify user with the file path and shortened URL
+            # Notify user with the shortened URL
             update.message.reply_text(
                 f'File uploaded successfully.\n'
-                f'File path: {file_url}\n'
                 f'Here is your short link: {short_url}\n\n'
                 'Do you want to post this link to the channel? (yes/no)'
             )
@@ -151,7 +150,6 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
-    file_path = context.user_data.get('file_path')
 
     if short_url:
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
@@ -159,11 +157,38 @@ def ask_file_name(update: Update, context: CallbackContext):
 
         post_to_channel(file_name, file_opener_url)
         
-        update.message.reply_text(f'File posted to channel successfully.\nFile Path: {file_path}')
+        update.message.reply_text(f'File posted to channel successfully.')
     else:
         update.message.reply_text('Failed to retrieve the shortened URL.')
     
     return ConversationHandler.END
+
+# Define the /post command handler
+def post(update: Update, context: CallbackContext):
+    try:
+        if context.args:
+            original_url = context.args[0]
+            logging.info(f"Received URL: {original_url}")
+
+            short_url = shorten_url(original_url)
+            if short_url:
+                short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
+                file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}'
+
+                update.message.reply_text(
+                    f'Here is your short link: {short_url}\n\n'
+                    'Do you want to post this link to the channel? (yes/no)'
+                )
+                context.user_data['short_url'] = short_url
+                context.user_data['file_opener_url'] = file_opener_url
+                return ASK_POST_CONFIRMATION
+            else:
+                update.message.reply_text('Failed to shorten the URL. Please try again later.')
+        else:
+            update.message.reply_text('Please provide a URL to shorten.')
+    except Exception as e:
+        logging.error(f"Error handling /post command: {e}")
+        update.message.reply_text('An error occurred. Please try again later.')
 
 # Add handlers to dispatcher
 conv_handler = ConversationHandler(
@@ -177,6 +202,7 @@ conv_handler = ConversationHandler(
 
 dispatcher.add_handler(conv_handler)
 dispatcher.add_handler(CommandHandler('start', start))
+dispatcher.add_handler(CommandHandler('post', post))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
@@ -202,7 +228,7 @@ def setup_webhook():
         data={'url': WEBHOOK_URL}
     )
     if response.json().get('ok'):
-        return "Webhook setup ok"
+return "Webhook setup ok"
     else:
         return "Webhook setup failed"
 
