@@ -66,43 +66,55 @@ def post(update: Update, context: CallbackContext):
         update.message.reply_text('Please provide a URL to shorten.')
 
 def handle_document(update: Update, context: CallbackContext):
-    file_url = update.message.document.get_file().file_path
-    short_url = shorten_url(file_url)
-    if short_url:
-        file_name = update.message.document.file_name
-        file_opener_url = generate_file_opener_url(short_url, file_name)
-        update.message.reply_text(
-            f'File uploaded.\nFile path: {file_url}\nShortened link: {short_url}\nFile opener URL: {file_opener_url}\nPost to channel? (yes/no)'
-        )
-        context.user_data.update({'short_url': short_url, 'file_opener_url': file_opener_url})
-        return ASK_POST_CONFIRMATION
-    update.message.reply_text('Failed to shorten the URL.')
+    try:
+        file_url = update.message.document.get_file().file_path
+        short_url = shorten_url(file_url)
+        if short_url:
+            file_name = update.message.document.file_name
+            file_opener_url = generate_file_opener_url(short_url, file_name)
+            update.message.reply_text(
+                f'File uploaded.\nFile path: {file_url}\nShortened link: {short_url}\nFile opener URL: {file_opener_url}\nPost to channel? (yes/no)'
+            )
+            context.user_data.update({'short_url': short_url, 'file_opener_url': file_opener_url})
+            return ASK_POST_CONFIRMATION
+        update.message.reply_text('Failed to shorten the URL.')
+    except Exception as e:
+        logger.error(f'Error handling document: {e}')
+        update.message.reply_text('An error occurred while processing the file.')
 
 def handle_photo(update: Update, context: CallbackContext):
-    file_url = update.message.photo[-1].get_file().file_path
-    short_url = shorten_url(file_url)
-    if short_url:
-        file_name = 'photo.jpg'  # Set a default file name for photos
-        file_opener_url = generate_file_opener_url(short_url, file_name)
-        update.message.reply_text(
-            f'Photo uploaded.\nFile path: {file_url}\nShortened link: {short_url}\nFile opener URL: {file_opener_url}\nPost to channel? (yes/no)'
-        )
-        context.user_data.update({'short_url': short_url, 'file_opener_url': file_opener_url})
-        return ASK_POST_CONFIRMATION
-    update.message.reply_text('Failed to shorten the URL.')
+    try:
+        file_url = update.message.photo[-1].get_file().file_path
+        short_url = shorten_url(file_url)
+        if short_url:
+            file_name = 'photo.jpg'
+            file_opener_url = generate_file_opener_url(short_url, file_name)
+            update.message.reply_text(
+                f'Photo uploaded.\nFile path: {file_url}\nShortened link: {short_url}\nFile opener URL: {file_opener_url}\nPost to channel? (yes/no)'
+            )
+            context.user_data.update({'short_url': short_url, 'file_opener_url': file_opener_url})
+            return ASK_POST_CONFIRMATION
+        update.message.reply_text('Failed to shorten the URL.')
+    except Exception as e:
+        logger.error(f'Error handling photo: {e}')
+        update.message.reply_text('An error occurred while processing the photo.')
 
 def handle_video(update: Update, context: CallbackContext):
-    file_url = update.message.video.get_file().file_path
-    short_url = shorten_url(file_url)
-    if short_url:
-        file_name = 'video.mp4'  # Set a default file name for videos
-        file_opener_url = generate_file_opener_url(short_url, file_name)
-        update.message.reply_text(
-            f'Video uploaded.\nFile path: {file_url}\nShortened link: {short_url}\nFile opener URL: {file_opener_url}\nPost to channel? (yes/no)'
-        )
-        context.user_data.update({'short_url': short_url, 'file_opener_url': file_opener_url})
-        return ASK_POST_CONFIRMATION
-    update.message.reply_text('Failed to shorten the URL.')
+    try:
+        file_url = update.message.video.get_file().file_path
+        short_url = shorten_url(file_url)
+        if short_url:
+            file_name = 'video.mp4'
+            file_opener_url = generate_file_opener_url(short_url, file_name)
+            update.message.reply_text(
+                f'Video uploaded.\nFile path: {file_url}\nShortened link: {short_url}\nFile opener URL: {file_opener_url}\nPost to channel? (yes/no)'
+            )
+            context.user_data.update({'short_url': short_url, 'file_opener_url': file_opener_url})
+            return ASK_POST_CONFIRMATION
+        update.message.reply_text('Failed to shorten the URL.')
+    except Exception as e:
+        logger.error(f'Error handling video: {e}')
+        update.message.reply_text('An error occurred while processing the video.')
 
 def ask_post_confirmation(update: Update, context: CallbackContext):
     if update.message.text.lower() == 'yes':
