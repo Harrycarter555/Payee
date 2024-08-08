@@ -30,10 +30,9 @@ if not all([TELEGRAM_TOKEN, WEBHOOK_URL, URL_SHORTENER_API_KEY, CHANNEL_ID, FILE
     missing_vars = [var for var in ['TELEGRAM_TOKEN', 'WEBHOOK_URL', 'URL_SHORTENER_API_KEY', 'CHANNEL_ID', 'FILE_OPENER_BOT_USERNAME', 'API_ID', 'API_HASH', 'USER_ID'] if not os.getenv(var)]
     raise ValueError(f"Environment variables missing: {', '.join(missing_vars)}")
 
-# Initialize logging to console
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    handlers=[logging.StreamHandler()])
+# Initialize logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Initialize Telegram bot
 bot = Bot(token=TELEGRAM_TOKEN)
@@ -61,10 +60,10 @@ def shorten_url(long_url: str) -> str:
             short_url = response_data.get("shortenedUrl", "")
             if short_url:
                 return short_url
-        logging.error("Unexpected response format")
+        logger.error("Unexpected response format")
         return long_url
     except requests.RequestException as e:
-        logging.error(f"Request error: {e}")
+        logger.error(f"Request error: {e}")
         return long_url
 
 # Define the start command handler
@@ -73,16 +72,41 @@ def start(update: Update, context: CallbackContext):
         if context.args:
             encoded_url = context.args[0]
             decoded_url = base64.b64decode(encoded_url).decode('utf-8')
-            logging.info(f"Decoded URL: {decoded_url}")
+            logger.info(f"Decoded URL: {decoded_url}")
 
             shortened_link = shorten_url(decoded_url)
-            logging.info(f"Shortened URL: {shortened_link}")
+            logger.info(f"Shortened URL: {shortened_link}")
 
             update.message.reply_text(f'Here is your shortened link: {shortened_link}')
         else:
             update.message.reply_text('Welcome! Please use the link provided in the channel.')
     except Exception as e:
-        logging.error(f"Error handling /start command: {e}")
+        logger.error(f"Error handling /start command: {e}")
+        update.message.reply_text('An error occurred. Please try again later.')
+
+# Define the post command handler
+def post(update: Update, context: CallbackContext):
+    try:
+        if context.args:
+            long_url = context.args[0]
+            shortened_url = shorten_url(long_url)
+            logger.info(f"Shortened URL: {shortened_url}")
+
+            encoded_url = base64.b64encode(shortened_url.encode('utf-8')).decode('utf-8')
+            file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={encoded_url}'
+
+            update.message.reply_text(
+                f'Here is your shortened link: {shortened_url}\n'
+                f'File opener URL: {file_opener_url}\n'
+                'Please provide the file name:'
+            )
+            context.user_data['short_url'] = shortened_url
+            context.user_data['file_opener_url'] = file_opener_url
+            return ASK_FILE_NAME
+        else:
+            update.message.reply_text('Please provide a URL to shorten.')
+    except Exception as e:
+        logger.error(f"Error handling /post command: {e}")
         update.message.reply_text('An error occurred. Please try again later.')
 
 # Define the handler for document uploads
@@ -95,7 +119,7 @@ def handle_document(update: Update, context: CallbackContext):
 
     context.user_data['file_path'] = file_url
 
-    logging.info(f"Received file with URL: {file_url} and size: {file_size}")
+    logger.info(f"Received file with URL: {file_url} and size: {file_size}")
 
     if file_size > 20 * 1024 * 1024:
         update.message.reply_text('File is too large. Uploading directly to your Telegram cloud storage. Please wait...')
@@ -122,9 +146,9 @@ def upload_file_to_user_telegram(file_url: str):
         await telethon_client.start()
         try:
             await telethon_client.send_file(USER_ID, file_url)
-            logging.info('File uploaded successfully to user\'s Telegram cloud storage.')
+            logger.info('File uploaded successfully to user\'s Telegram cloud storage.')
         except Exception as e:
-            logging.error(f'Error uploading file: {e}')
+            logger.error(f'Error uploading file: {e}')
         await telethon_client.disconnect()
 
     with telethon_client:
@@ -153,15 +177,12 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
-    file_path = context.user_data.get('file_path')
+    file_opener_url = context.user_data.get('file_opener_url')
 
     if short_url:
-        short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
-        file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
-
         post_to_channel(file_name, file_opener_url)
         
-        update.message.reply_text(f'File posted to channel successfully.\nFile Path: {file_path}')
+        update.message.reply_text(f'File posted to channel successfully.')
     else:
         update.message.reply_text('Failed to retrieve the shortened URL.')
     
@@ -189,7 +210,7 @@ def webhook():
         dispatcher.process_update(update)
         return 'ok', 200
     except Exception as e:
-        logging.error(f'Error processing update: {e}')
+        logger.error(f'Error processing update: {e}')
         return 'error', 500
 
 # Home route
@@ -199,25 +220,25 @@ def home():
 
 # Webhook setup route
 @app.route('/setwebhook', methods=['GET', 'POST'])
+# Webhook setup route
+@app.route('/setwebhook', methods=['GET', 'POST'])
 def setup_webhook():
     response = requests.post(
         f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook',
         data={'url': WEBHOOK_URL}
     )
-    if response.json().get('ok'):
-        return "Webhook setup ok"
-    else:
-        return "Webhook setup failed"
-
-# Favicon route
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory('static', 'favicon.ico')
-
-# Main entry point for the Flask application
-if __name__ == '__main__':
-    # Set Flask's port and debug mode from environment variables or defaults
-    port = int(os.getenv('PORT', 5000))
-    debug_mode = os.getenv('DEBUG', 'False') == 'True'
     
-    app.run(host='0.0.0.0', port=port, debug=debug_mode)
+    if response.status_code == 200:
+        return 'Webhook set up successfully!', 200
+    else:
+        return f'Failed to set up webhook: {response.text}', 500
+
+# Error handling route
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f'Internal server error: {error}')
+    return 'Internal server error', 500
+
+# Run Flask app
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
