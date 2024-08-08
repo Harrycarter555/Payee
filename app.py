@@ -64,11 +64,12 @@ def shorten_url(long_url: str) -> str:
 
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text('Please upload a file or send a URL to Post.')
+    update.message.reply_text('Upload a file to Post')
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
-    update.message.reply_text('Please use the /post command to start the URL shortening process.')
+    update.message.reply_text('Processing your file, please wait...')
+    # Implement file processing and posting logic here
 
 # Upload file to user's Telegram account
 def upload_file_to_user_telegram(file_url: str):
