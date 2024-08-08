@@ -1,10 +1,10 @@
 import logging
 import os
-import base64
-import requests
 from flask import Flask, request, send_from_directory
+import requests
 from telegram import Bot, Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters, ConversationHandler
+import base64
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
 from dotenv import load_dotenv
@@ -51,9 +51,6 @@ def shorten_url(long_url: str) -> str:
         response = requests.get(api_url)
         response.raise_for_status()
         
-        # Debugging: print the raw response text and JSON
-        logging.info(f"API Response: {response.text}")
-        
         response_data = response.json()
         if response_data.get("status") == "success":
             short_url = response_data.get("shortenedUrl", "")
@@ -67,7 +64,21 @@ def shorten_url(long_url: str) -> str:
 
 # Define the start command handler
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text('Please upload a file or send a URL to Post.')
+    try:
+        if context.args:
+            encoded_url = context.args[0]
+            decoded_url = base64.b64decode(encoded_url).decode('utf-8')
+            logging.info(f"Decoded URL: {decoded_url}")
+
+            shortened_link = shorten_url(decoded_url)
+            logging.info(f"Shortened URL: {shortened_link}")
+
+            update.message.reply_text(f'Here is your shortened link: {shortened_link}')
+        else:
+            update.message.reply_text('Welcome! Please use the link provided in the channel.')
+    except Exception as e:
+        logging.error(f"Error handling /start command: {e}")
+        update.message.reply_text('An error occurred. Please try again later.')
 
 # Define the handler for document uploads
 def handle_document(update: Update, context: CallbackContext):
@@ -93,7 +104,7 @@ def handle_document(update: Update, context: CallbackContext):
             update.message.reply_text(
                 f'File uploaded successfully.\n'
                 f'File path: {file_url}\n'
-                f'Here is your shortened link: {short_url}\n\n'
+                f'Here is your short link: {short_url}\n\n'
                 'Do you want to post this link to the channel? (yes/no)'
             )
             context.user_data['short_url'] = short_url
@@ -140,51 +151,25 @@ def ask_post_confirmation(update: Update, context: CallbackContext):
 def ask_file_name(update: Update, context: CallbackContext):
     file_name = update.message.text
     short_url = context.user_data.get('short_url')
-    
+    file_path = context.user_data.get('file_path')
+
     if short_url:
         short_url_encoded = base64.b64encode(short_url.encode('utf-8')).decode('utf-8')
         file_opener_url = f'https://t.me/{FILE_OPENER_BOT_USERNAME}?start={short_url_encoded}&&{file_name}'
 
         post_to_channel(file_name, file_opener_url)
         
-        update.message.reply_text('File posted to channel successfully.')
+        update.message.reply_text(f'File posted to channel successfully.\nFile Path: {file_path}')
     else:
         update.message.reply_text('Failed to retrieve the shortened URL.')
     
     return ConversationHandler.END
 
-# Define the handler for URL in /post command
-def process_url_for_post(update: Update, context: CallbackContext):
-    url = update.message.text
-    if requests.utils.urlparse(url).scheme in ["http", "https"]:
-        update.message.reply_text('Processing your URL, please wait...')
-        
-        # Shorten the URL
-        shortened_link = shorten_url(url)
-        
-        # Ask user if they want to post the link to the channel
-        update.message.reply_text(
-            f'Here is your shortened link: {shortened_link}\n\nDo you want to post this link to the channel? (yes/no)'
-        )
-        context.user_data['short_url'] = shortened_link
-        return ASK_POST_CONFIRMATION
-    else:
-        update.message.reply_text('Please provide a valid URL.')
-        return ASK_POST_CONFIRMATION
-
-# Define the handler for /post command
-def handle_post_command(update: Update, context: CallbackContext):
-    update.message.reply_text('Please provide the URL to be shortened:')
-    return ASK_POST_CONFIRMATION
-
 # Add handlers to dispatcher
-post_handler = CommandHandler('post', handle_post_command)
-url_handler = MessageHandler(Filters.text & ~Filters.command, process_url_for_post)
-
 conv_handler = ConversationHandler(
-    entry_points=[post_handler],
+    entry_points=[MessageHandler(Filters.document, handle_document)],
     states={
-        ASK_POST_CONFIRMATION: [url_handler, MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
+        ASK_POST_CONFIRMATION: [MessageHandler(Filters.text & ~Filters.command, ask_post_confirmation)],
         ASK_FILE_NAME: [MessageHandler(Filters.text & ~Filters.command, ask_file_name)],
     },
     fallbacks=[]
@@ -192,7 +177,6 @@ conv_handler = ConversationHandler(
 
 dispatcher.add_handler(conv_handler)
 dispatcher.add_handler(CommandHandler('start', start))
-dispatcher.add_handler(MessageHandler(Filters.document, handle_document))
 
 # Webhook route
 @app.route('/webhook', methods=['POST'])
